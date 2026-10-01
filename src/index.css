@@ -1,0 +1,114 @@
+@import "tailwindcss";
+
+@layer base {
+  :root,
+  [data-theme="dark"] {
+    --bg-canvas: #0b0f17;
+    --bg-surface: #111827;
+    --bg-elevated: #1e293b;
+    --bg-editor: #0d131f;
+    --border-subtle: rgba(255, 255, 255, 0.08);
+    --text-primary: #f1f5f9;
+    --text-secondary: #94a3b8;
+    --text-muted: #64748b;
+    --accent-primary: #10b981;
+    --accent-hover: #059669;
+  }
+
+  [data-theme="light"] {
+    --bg-canvas: #f8fafc;
+    --bg-surface: #ffffff;
+    --bg-elevated: #f1f5f9;
+    --bg-editor: #ffffff;
+    --border-subtle: rgba(15, 23, 42, 0.1);
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
+    --text-muted: #64748b;
+    --accent-primary: #059669;
+    --accent-hover: #047857;
+  }
+
+  [data-theme="amoled"] {
+    --bg-canvas: #000000;
+    --bg-surface: #09090b;
+    --bg-elevated: #18181b;
+    --bg-editor: #000000;
+    --border-subtle: rgba(255, 255, 255, 0.1);
+    --text-primary: #fafafa;
+    --text-secondary: #a1a1aa;
+    --text-muted: #71717a;
+    --accent-primary: #10b981;
+    --accent-hover: #059669;
+  }
+
+  [data-theme="dracula"] {
+    --bg-canvas: #1e1f29;
+    --bg-surface: #282a36;
+    --bg-elevated: #343746;
+    --bg-editor: #21222c;
+    --border-subtle: rgba(248, 248, 242, 0.1);
+    --text-primary: #f8f8f2;
+    --text-secondary: #bd93f9;
+    --text-muted: #6272a4;
+    --accent-primary: #50fa7b;
+    --accent-hover: #3ae368;
+  }
+
+  [data-theme="monokai"] {
+    --bg-canvas: #1e1f1c;
+    --bg-surface: #272822;
+    --bg-elevated: #3e3d32;
+    --bg-editor: #22231e;
+    --border-subtle: rgba(248, 248, 242, 0.1);
+    --text-primary: #f8f8f2;
+    --text-secondary: #a6e22e;
+    --text-muted: #75715e;
+    --accent-primary: #a6e22e;
+    --accent-hover: #8dc421;
+  }
+
+  [data-theme="solarized"] {
+    --bg-canvas: #00212b;
+    --bg-surface: #002b36;
+    --bg-elevated: #073642;
+    --bg-editor: #00252f;
+    --border-subtle: rgba(147, 161, 161, 0.14);
+    --text-primary: #fdf6e3;
+    --text-secondary: #93a1a1;
+    --text-muted: #657b83;
+    --accent-primary: #2aa198;
+    --accent-hover: #21857d;
+  }
+
+  body {
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    background-color: var(--bg-canvas);
+    color: var(--text-primary);
+    overflow-x: hidden;
+  }
+
+  code, pre, .font-mono {
+    font-family: 'JetBrains Mono', monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .font-display {
+    font-family: 'Syne', sans-serif;
+  }
+}
+
+/* Custom subtle scrollbars for IDE panels */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.2);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.35);
+}
