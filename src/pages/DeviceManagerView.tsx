@@ -5,7 +5,11 @@ import {
   Cpu,
   Play,
   Plug,
+  Plus,
+  RotateCcw,
+  ShieldCheck,
   Smartphone,
+  Trash2,
   Wifi,
   XCircle,
 } from 'lucide-react';
@@ -26,6 +30,20 @@ export const DeviceManagerView: React.FC = () => {
   const [pairCodeInput, setPairCodeInput] = useState('748291');
   const [tapCount, setTapCount] = useState(0);
   const [deviceNotice, setDeviceNotice] = useState<string | null>(null);
+
+  // Interactive state for React & Flutter live device runners
+  const [reactDraft, setReactDraft] = useState('');
+  const [reactNotes, setReactNotes] = useState<string[]>([
+    'Configure Gradle offline cache',
+    'Test APK signing with debug keystore',
+    'Verify Capacitor WebView bridge',
+  ]);
+  const [flutterInput, setFlutterInput] = useState('');
+  const [flutterItems, setFlutterItems] = useState<string[]>([
+    'Hot Reload Ready',
+    'Material 3 Theme',
+    'ARM64 Impeller Engine',
+  ]);
 
   const activeProject = useMemo(
     () => projects.find((p) => p.id === activeProjectId) || projects[0],
@@ -54,9 +72,23 @@ export const DeviceManagerView: React.FC = () => {
   };
 
   const handleCaptureScreenshot = () => {
-    appendLogcat('I', 'AdbScreencap', 'Captured device framebuffer to /sdcard/Pictures/Screenshot_CodeStudio.png');
+    appendLogcat(
+      'I',
+      'AdbScreencap',
+      'Captured device framebuffer to /sdcard/Pictures/Screenshot_CodeStudio.png'
+    );
     setDeviceNotice('Saved device screenshot to /storage/emulated/0/CodeStudio/Backups/');
     setTimeout(() => setDeviceNotice(null), 2600);
+  };
+
+  const handleHotReload = () => {
+    appendLogcat(
+      'I',
+      activeProject.language === 'Flutter' ? 'FlutterRunner' : 'ActivityManager',
+      `Hot Reloaded ${activeProject.name} (${activeProject.language}) in 140ms`
+    );
+    setDeviceNotice(`Hot Reloaded ${activeProject.name} (${activeProject.language}) on device`);
+    setTimeout(() => setDeviceNotice(null), 2200);
   };
 
   return (
@@ -66,10 +98,10 @@ export const DeviceManagerView: React.FC = () => {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800/80 pb-5">
           <div>
             <h1 className="text-xl sm:text-2xl font-display font-bold text-slate-100">
-              Device Manager & ADB Runtime
+              Device Manager & Live {activeProject.language} App Runner
             </h1>
             <p className="text-xs sm:text-sm text-slate-400 mt-1">
-              Manage local phone execution, USB OTG debugging, and Wireless ADB pairing.
+              Test your {activeProject.language} ({activeProject.buildSystem}) application live on the connected Android 14 target.
             </p>
           </div>
 
@@ -81,7 +113,7 @@ export const DeviceManagerView: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Left Column: Device Targets & Wireless ADB Pairing (Section 14) */}
+          {/* Left Column: Device Targets & Wireless ADB Pairing */}
           <div className="lg:col-span-7 space-y-6">
             <div className="p-5 rounded-xl bg-[#111827] border border-slate-800/80 space-y-4">
               <div className="flex items-center justify-between">
@@ -115,7 +147,6 @@ export const DeviceManagerView: React.FC = () => {
                               {dev.name}
                             </span>
                           </div>
-                          {/* Unboxed metadata per Zero-Pill Discipline */}
                           <div className="text-xs text-slate-400 font-mono flex flex-wrap items-center gap-1.5 mt-0.5">
                             <span>{dev.androidVersion} (API {dev.apiLevel})</span>
                             <span>·</span>
@@ -164,6 +195,24 @@ export const DeviceManagerView: React.FC = () => {
               </div>
             </div>
 
+            {/* Active Project Runtime Permissions Status */}
+            <div className="p-5 rounded-xl bg-[#111827] border border-slate-800/80 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-semibold text-slate-100 flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                  <span>Granted App Permissions on Device ({activeProject.name})</span>
+                </span>
+                <span className="text-xs font-mono text-emerald-400">All Allowed</span>
+              </div>
+              <div className="flex flex-wrap gap-2 text-xs font-mono text-slate-300">
+                {(activeProject.permissions || ['android.permission.INTERNET']).map((p) => (
+                  <span key={p} className="text-slate-300">
+                    ✓ {p.replace('android.permission.', '')}
+                  </span>
+                ))}
+              </div>
+            </div>
+
             {/* Wireless ADB Pairing Card */}
             <form
               onSubmit={handlePairSubmit}
@@ -175,9 +224,6 @@ export const DeviceManagerView: React.FC = () => {
                 </h2>
                 <Wifi className="w-4 h-4 text-emerald-400" />
               </div>
-              <p className="text-xs text-slate-400">
-                Pair directly with local wireless debugging on this device or another phone on the same Wi-Fi network.
-              </p>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                 <div>
@@ -209,86 +255,238 @@ export const DeviceManagerView: React.FC = () => {
             </form>
           </div>
 
-          {/* Right Column: Interactive Device App Runner */}
+          {/* Right Column: Interactive Device App Runner (Supports Kotlin, Java, React, and Flutter!) */}
           <div className="lg:col-span-5 p-5 rounded-xl bg-[#111827] border border-slate-800/80 flex flex-col items-center space-y-4">
             <div className="w-full flex items-center justify-between">
               <div>
-                <h2 className="text-base font-semibold text-slate-100">Live Device App Runner</h2>
+                <h2 className="text-base font-semibold text-slate-100">
+                  Live {activeProject.language} App Runner
+                </h2>
                 <p className="text-xs text-slate-400">
-                  Running: <span className="font-mono text-emerald-400">{activeProject.packageName}</span>
+                  Running:{' '}
+                  <span className="font-mono text-emerald-400">{activeProject.packageName}</span>
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={handleCaptureScreenshot}
-                className="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs text-slate-300 flex items-center gap-1.5"
-                title="Capture Device Screenshot"
-              >
-                <Camera className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Screenshot</span>
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={handleHotReload}
+                  className="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs text-emerald-300 flex items-center gap-1 cursor-pointer"
+                  title="Hot Reload App"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Reload</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCaptureScreenshot}
+                  className="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs text-slate-300 flex items-center gap-1 cursor-pointer"
+                  title="Capture Device Screenshot"
+                >
+                  <Camera className="w-3.5 h-3.5 text-emerald-400" />
+                </button>
+              </div>
             </div>
 
             {/* Interactive Phone Runner Frame */}
-            <div className="w-full max-w-[290px] rounded-[26px] border-4 border-slate-800 bg-slate-950 shadow-xl overflow-hidden flex flex-col">
+            <div className="w-full max-w-[300px] rounded-[28px] border-4 border-slate-800 bg-slate-950 shadow-xl overflow-hidden flex flex-col">
               <div className="h-6 px-4 bg-slate-950 flex items-center justify-between text-[10px] font-mono text-slate-400 border-b border-slate-800">
                 <span>09:41</span>
-                <span>API 34 · ARM64</span>
+                <span>{activeProject.language} · API 34</span>
               </div>
 
-              <div
-                className="p-4 flex-1 min-h-[340px] flex flex-col gap-3"
-                style={{ backgroundColor: parsedXml.rootBg || '#0F172A' }}
-              >
-                {parsedXml.nodes.map((node, i) => (
-                  <div key={i}>
-                    {node.tag === 'TextView' && (
-                      <div
-                        style={{
-                          fontSize: `${ parseInt(node.textSize, 10) || 16 }px`,
-                          color: node.textColor || '#F8FAFC',
-                        }}
-                      >
-                        {i === 0 && tapCount > 0
-                          ? `Action executed #${tapCount} in ${activeProject.name}`
-                          : node.text}
+              {/* FLUTTER LIVE RUNTIME */}
+              {activeProject.language === 'Flutter' ? (
+                <div className="p-4 flex-1 min-h-[380px] flex flex-col justify-between bg-[#0D1524] relative">
+                  <div className="space-y-3">
+                    <div className="pb-2 border-b border-slate-800 flex items-center justify-between">
+                      <span className="text-sm font-bold text-sky-300">
+                        {activeProject.name} (Flutter)
+                      </span>
+                      <span className="text-[10px] font-mono text-slate-400">Impeller</span>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-slate-900/90 border border-sky-500/30">
+                      <div className="text-xs text-slate-400">StatefulWidget Counter</div>
+                      <div className="text-2xl font-bold font-mono text-sky-300 mt-0.5">
+                        {tapCount}
                       </div>
-                    )}
-                    {node.tag === 'EditText' && (
+                    </div>
+
+                    <div className="flex gap-1.5">
                       <input
                         type="text"
-                        placeholder={node.hint || 'Input text...'}
-                        className="w-full px-3 py-2 rounded bg-slate-900/90 border-b border-emerald-400 text-xs text-slate-100"
+                        value={flutterInput}
+                        onChange={(e) => setFlutterInput(e.target.value)}
+                        placeholder="Add Flutter item..."
+                        className="flex-1 px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-100"
                       />
-                    )}
-                    {node.tag === 'Button' && (
                       <button
                         type="button"
                         onClick={() => {
-                          const next = tapCount + 1;
-                          setTapCount(next);
-                          appendLogcat(
-                            'D',
-                            'MainActivity',
-                            `User tapped ${node.id} on This Device (count=${next})`
-                          );
+                          if (!flutterInput.trim()) return;
+                          setFlutterItems([flutterInput.trim(), ...flutterItems]);
+                          appendLogcat('D', 'Flutter', `Added item "${flutterInput.trim()}" to state`);
+                          setFlutterInput('');
                         }}
-                        className="w-full py-2.5 px-4 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold text-xs flex items-center justify-center gap-1.5 active:scale-[0.98] transition-transform cursor-pointer"
+                        className="px-3 py-1.5 rounded-lg bg-sky-500 text-slate-950 font-semibold text-xs cursor-pointer"
                       >
-                        <Play className="w-3.5 h-3.5" />
-                        <span>{node.text || 'Run Action'}</span>
+                        Add
                       </button>
-                    )}
+                    </div>
+
+                    <div className="space-y-1.5 max-h-36 overflow-y-auto">
+                      {flutterItems.map((item, idx) => (
+                        <div
+                          key={idx}
+                          className="px-3 py-2 rounded-lg bg-slate-900/80 border border-slate-800 text-xs text-slate-200 flex items-center justify-between"
+                        >
+                          <span>{item}</span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setFlutterItems(flutterItems.filter((_, i) => i !== idx))
+                            }
+                            className="text-slate-500 hover:text-rose-400"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                ))}
-              </div>
+
+                  {/* Flutter FloatingActionButton */}
+                  <div className="flex justify-end pt-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = tapCount + 1;
+                        setTapCount(next);
+                        appendLogcat('D', 'Flutter', `FloatingActionButton pressed: _counter=${next}`);
+                      }}
+                      className="w-12 h-12 rounded-2xl bg-sky-500 hover:bg-sky-400 text-slate-950 shadow-lg flex items-center justify-center active:scale-95 transition-transform cursor-pointer"
+                      title="Flutter FloatingActionButton"
+                    >
+                      <Plus className="w-6 h-6" />
+                    </button>
+                  </div>
+                </div>
+              ) : activeProject.language === 'React' ? (
+                /* REACT + CAPACITOR LIVE RUNTIME */
+                <div className="p-4 flex-1 min-h-[380px] flex flex-col justify-between bg-[#0B111E]">
+                  <div className="space-y-3">
+                    <div className="pb-2 border-b border-slate-800 flex items-center justify-between">
+                      <span className="text-sm font-bold text-indigo-300">
+                        {activeProject.name} (React 19)
+                      </span>
+                      <span className="text-[10px] font-mono text-slate-400">Capacitor</span>
+                    </div>
+
+                    <div className="flex gap-1.5">
+                      <input
+                        type="text"
+                        value={reactDraft}
+                        onChange={(e) => setReactDraft(e.target.value)}
+                        placeholder="Write a dev note..."
+                        className="flex-1 px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-100"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!reactDraft.trim()) return;
+                          setReactNotes([reactDraft.trim(), ...reactNotes]);
+                          setTapCount((c) => c + 1);
+                          appendLogcat('I', 'CapacitorConsole', `React state updated: added "${reactDraft.trim()}"`);
+                          setReactDraft('');
+                        }}
+                        className="px-3 py-1.5 rounded-lg bg-emerald-500 text-slate-950 font-semibold text-xs cursor-pointer"
+                      >
+                        Save
+                      </button>
+                    </div>
+
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                      {reactNotes.map((note, idx) => (
+                        <div
+                          key={idx}
+                          className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-200 flex items-center justify-between gap-2"
+                        >
+                          <span className="truncate">{note}</span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setReactNotes(reactNotes.filter((_, i) => i !== idx))
+                            }
+                            className="text-slate-500 hover:text-rose-400 shrink-0"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="text-[11px] font-mono text-slate-500 pt-2">
+                    WebView Bridge Active · {reactNotes.length} items
+                  </div>
+                </div>
+              ) : (
+                /* KOTLIN & JAVA NATIVE XML RUNTIME */
+                <div
+                  className="p-4 flex-1 min-h-[380px] flex flex-col gap-3"
+                  style={{ backgroundColor: parsedXml.rootBg || '#0F172A' }}
+                >
+                  {parsedXml.nodes.map((node, i) => (
+                    <div key={i}>
+                      {node.tag === 'TextView' && (
+                        <div
+                          style={{
+                            fontSize: `${parseInt(node.textSize, 10) || 16}px`,
+                            color: node.textColor || '#F8FAFC',
+                          }}
+                        >
+                          {i === 0 && tapCount > 0
+                            ? `Action executed #${tapCount} in ${activeProject.name}`
+                            : node.text}
+                        </div>
+                      )}
+                      {node.tag === 'EditText' && (
+                        <input
+                          type="text"
+                          placeholder={node.hint || 'Input text...'}
+                          className="w-full px-3 py-2 rounded bg-slate-900/90 border-b border-emerald-400 text-xs text-slate-100"
+                        />
+                      )}
+                      {node.tag === 'Button' && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const next = tapCount + 1;
+                            setTapCount(next);
+                            appendLogcat(
+                              'D',
+                              'MainActivity',
+                              `[${activeProject.language}] User tapped ${node.id} on This Device (count=${next})`
+                            );
+                          }}
+                          className="w-full py-2.5 px-4 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold text-xs flex items-center justify-center gap-1.5 active:scale-[0.98] transition-transform cursor-pointer"
+                        >
+                          <Play className="w-3.5 h-3.5" />
+                          <span>{node.text || 'Run Action'}</span>
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
 
               <div className="px-3 py-2 bg-slate-950 border-t border-slate-900 flex items-center justify-between text-[11px] font-mono text-slate-500">
                 <span className="flex items-center gap-1">
                   <Cpu className="w-3 h-3 text-emerald-400" />
                   PID 14280
                 </span>
-                <span>Clicks: {tapCount}</span>
+                <span>Events: {tapCount}</span>
               </div>
             </div>
           </div>

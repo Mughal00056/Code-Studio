@@ -10,11 +10,14 @@ import {
   LogcatEntry,
   OpenTab,
   Project,
+  ProjectBuildSystem,
+  ProjectLanguage,
   ProjectTemplateId,
+  ToolchainPackage,
 } from '../types/ide';
 import { createInitialProjects, detectLanguage, generateProjectFiles } from '../services/templates';
 
-const STORAGE_KEY = 'codestudio_mobile_state_v1';
+const STORAGE_KEY = 'codestudio_mobile_state_v2';
 
 interface TerminalLine {
   id: string;
@@ -47,6 +50,19 @@ interface IdeState {
   setCommandPaletteOpen: (open: boolean) => void;
   aboutModalOpen: boolean;
   setAboutModalOpen: (open: boolean) => void;
+  sdkManagerModalOpen: boolean;
+  setSdkManagerModalOpen: (open: boolean) => void;
+  activeInstallApk: ApkArtifact | null;
+  setActiveInstallApk: (apk: ApkArtifact | null) => void;
+
+  // Internal Editor Clipboard (ensures 100% reliable Copy/Cut/Paste even inside strict iframes)
+  editorClipboard: string;
+  setEditorClipboard: (text: string) => void;
+
+  // SDK & Toolchain Manager (Kotlin, Gradle, Java, React, Flutter, Android SDK)
+  toolchains: ToolchainPackage[];
+  installToolchain: (id: string) => void;
+  installAllToolchains: () => void;
 
   // Projects
   projects: Project[];
@@ -55,13 +71,16 @@ interface IdeState {
   createProject: (params: {
     name: string;
     packageName: string;
-    language: 'Kotlin' | 'Java' | 'React / TypeScript';
+    language: ProjectLanguage;
     template: ProjectTemplateId;
     minSdk: string;
-    buildSystem: 'Gradle (Kotlin DSL)' | 'Gradle (Groovy)' | 'Vite + Capacitor';
+    buildSystem: ProjectBuildSystem;
+    permissions?: string[];
   }) => Project;
   importProjectFiles: (name: string, packageName: string, files: FileNode[]) => void;
   deleteProject: (projectId: string) => void;
+  setProjectBuildConfig: (language: ProjectLanguage, buildSystem: ProjectBuildSystem) => void;
+  toggleProjectPermission: (permissionId: string) => void;
 
   // File Operations
   openTabs: OpenTab[];
@@ -92,8 +111,8 @@ interface IdeState {
   buildSteps: BuildStepStatus[];
   buildLogs: string[];
   apkArtifacts: ApkArtifact[];
-  triggerBuild: (format: 'apk' | 'aab' | 'clean' | 'rebuild') => void;
-  installApkOnDevice: (apkId: string, deviceId?: string) => void;
+  triggerBuild: (format: 'apk' | 'aab' | 'clean' | 'rebuild', autoInstall?: boolean) => void;
+  installApkOnDevice: (apkId: string, grantedPerms?: string[], deviceId?: string) => void;
   deleteApkArtifact: (apkId: string) => void;
 
   // Logcat
@@ -128,6 +147,81 @@ function formatTimeNow(): string {
   return `${hh}:${mm}:${ss}.${ms}`;
 }
 
+const DEFAULT_TOOLCHAINS: ToolchainPackage[] = [
+  {
+    id: 'tc-kotlin',
+    name: 'Kotlin Compiler & K2 Engine',
+    category: 'Kotlin',
+    version: '2.0.20',
+    sizeMb: 74,
+    installed: true,
+    installing: false,
+    progress: 100,
+    description: 'Official JetBrains Kotlin compiler (kotlinc), stdlib, and Android KTX extensions.',
+    binaryPath: '/data/data/com.codestudio/files/usr/bin/kotlinc',
+  },
+  {
+    id: 'tc-java',
+    name: 'OpenJDK 17 LTS (ARM64 Android)',
+    category: 'Java',
+    version: '17.0.11',
+    sizeMb: 182,
+    installed: true,
+    installing: false,
+    progress: 100,
+    description: 'Full Java Development Kit (javac, java, jar, keytool) for Android compilation.',
+    binaryPath: '/data/data/com.codestudio/files/usr/bin/javac',
+  },
+  {
+    id: 'tc-gradle',
+    name: 'Gradle Build Tool & Daemon',
+    category: 'Gradle',
+    version: '8.7',
+    sizeMb: 128,
+    installed: true,
+    installing: false,
+    progress: 100,
+    description: 'Android Gradle Plugin (AGP 8.5), Kotlin DSL, and offline dependency cache.',
+    binaryPath: '/data/data/com.codestudio/files/usr/bin/gradle',
+  },
+  {
+    id: 'tc-android-sdk',
+    name: 'Android SDK Platform 34 + AAPT2 + D8',
+    category: 'Android SDK',
+    version: '34.0.0',
+    sizeMb: 215,
+    installed: true,
+    installing: false,
+    progress: 100,
+    description: 'Android 14 framework stubs, AAPT2 resource compiler, D8 dexer, and apksigner.',
+    binaryPath: '/data/data/com.codestudio/files/sdk/platforms/android-34',
+  },
+  {
+    id: 'tc-react',
+    name: 'React 19 + Node.js 22 + Capacitor CLI',
+    category: 'React',
+    version: '22.4.0',
+    sizeMb: 94,
+    installed: true,
+    installing: false,
+    progress: 100,
+    description: 'Vite bundler, TypeScript compiler, npm, and Capacitor Android WebView bridge.',
+    binaryPath: '/data/data/com.codestudio/files/usr/bin/node',
+  },
+  {
+    id: 'tc-flutter',
+    name: 'Flutter SDK + Dart 3.5 + Impeller',
+    category: 'Flutter',
+    version: '3.24.1',
+    sizeMb: 310,
+    installed: true,
+    installing: false,
+    progress: 100,
+    description: 'Flutter framework, Dart AOT/JIT compiler, Material 3 widget catalog, and Gradle runner.',
+    binaryPath: '/data/data/com.codestudio/files/flutter/bin/flutter',
+  },
+];
+
 const DEFAULT_SETTINGS: IdeSettings = {
   fontSize: 13,
   theme: 'dark',
@@ -149,9 +243,9 @@ const DEFAULT_SETTINGS: IdeSettings = {
 };
 
 const INITIAL_BUILD_STEPS: BuildStepStatus[] = [
-  { id: 'step-kotlin', label: 'Kotlin / Java compilation', taskName: ':app:compileDebugKotlin', status: 'completed', durationMs: 420 },
+  { id: 'step-kotlin', label: 'Kotlin / Java / Dart compilation', taskName: ':app:compileDebugSources', status: 'completed', durationMs: 420 },
   { id: 'step-res', label: 'Resource compilation (AAPT2)', taskName: ':app:mergeDebugResources', status: 'completed', durationMs: 310 },
-  { id: 'step-manifest', label: 'Manifest processing', taskName: ':app:processDebugMainManifest', status: 'completed', durationMs: 140 },
+  { id: 'step-manifest', label: 'Manifest & Permissions merge', taskName: ':app:processDebugMainManifest', status: 'completed', durationMs: 140 },
   { id: 'step-dex', label: 'DEX bytecode generation (D8)', taskName: ':app:dexBuilderDebug', status: 'completed', durationMs: 510 },
   { id: 'step-pkg', label: 'APK packaging & v2 signing', taskName: ':app:packageDebug', status: 'completed', durationMs: 280 },
 ];
@@ -160,6 +254,7 @@ function loadPersistedState(): {
   projects: Project[];
   settings: IdeSettings;
   apkArtifacts: ApkArtifact[];
+  toolchains: ToolchainPackage[];
 } {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -170,6 +265,7 @@ function loadPersistedState(): {
           projects: parsed.projects,
           settings: { ...DEFAULT_SETTINGS, ...(parsed.settings || {}) },
           apkArtifacts: parsed.apkArtifacts || [],
+          toolchains: parsed.toolchains || DEFAULT_TOOLCHAINS,
         };
       }
     }
@@ -185,19 +281,26 @@ function loadPersistedState(): {
       projectId: 'proj-myapp',
       projectName: 'MyApp',
       packageName: 'com.example.myapp',
+      language: 'Kotlin',
+      buildSystem: 'Kotlin Gradle DSL',
       variant: 'debug',
       format: 'apk',
       versionName: '1.0.0',
       versionCode: 1,
       minSdk: 'API 26 (Android 8.0)',
       targetSdk: 'API 34 (Android 14.0)',
-      sizeBytes: 2485120, // ~2.4 MB
+      sizeBytes: 2485120,
       createdAt: Date.now() - 1000 * 60 * 12,
-      outputPath: 'app/build/outputs/apk/debug/app-debug.apk',
+      outputPath: 'app/build/outputs/apk/debug/MyApp-debug.apk',
       permissions: [
         'android.permission.INTERNET',
-        'android.permission.ACCESS_NETWORK_STATE',
         'android.permission.VIBRATE',
+        'android.permission.POST_NOTIFICATIONS',
+      ],
+      grantedPermissions: [
+        'android.permission.INTERNET',
+        'android.permission.VIBRATE',
+        'android.permission.POST_NOTIFICATIONS',
       ],
       activities: ['com.example.myapp.MainActivity'],
       services: ['androidx.appcompat.app.AppLocalesMetadataHolderService'],
@@ -209,10 +312,16 @@ function loadPersistedState(): {
     projects: initialProjects,
     settings: DEFAULT_SETTINGS,
     apkArtifacts: initialApks,
+    toolchains: DEFAULT_TOOLCHAINS,
   };
 }
 
-function persistState(projects: Project[], settings: IdeSettings, apkArtifacts: ApkArtifact[]) {
+function persistState(
+  projects: Project[],
+  settings: IdeSettings,
+  apkArtifacts: ApkArtifact[],
+  toolchains?: ToolchainPackage[]
+) {
   try {
     localStorage.setItem(
       STORAGE_KEY,
@@ -220,6 +329,7 @@ function persistState(projects: Project[], settings: IdeSettings, apkArtifacts: 
         projects,
         settings,
         apkArtifacts,
+        toolchains: toolchains || DEFAULT_TOOLCHAINS,
       })
     );
   } catch {
@@ -230,7 +340,9 @@ function persistState(projects: Project[], settings: IdeSettings, apkArtifacts: 
 const initialData = loadPersistedState();
 const firstProject = initialData.projects[0];
 const defaultOpenFile =
-  firstProject.files.find((f) => f.name.startsWith('MainActivity'))?.path ||
+  firstProject.files.find(
+    (f) => f.name.startsWith('MainActivity') || f.name === 'main.dart' || f.name === 'App.tsx'
+  )?.path ||
   firstProject.files.find((f) => f.type === 'file')?.path ||
   null;
 const secondOpenFile =
@@ -290,6 +402,62 @@ export const useIdeStore = create<IdeState>((set, get) => ({
   aboutModalOpen: false,
   setAboutModalOpen: (open) => set({ aboutModalOpen: open }),
 
+  sdkManagerModalOpen: false,
+  setSdkManagerModalOpen: (open) => set({ sdkManagerModalOpen: open }),
+
+  activeInstallApk: null,
+  setActiveInstallApk: (apk) => set({ activeInstallApk: apk }),
+
+  editorClipboard: '',
+  setEditorClipboard: (text) => set({ editorClipboard: text }),
+
+  toolchains: initialData.toolchains,
+
+  installToolchain: (id) => {
+    set((s) => ({
+      toolchains: s.toolchains.map((tc) =>
+        tc.id === id ? { ...tc, installing: true, progress: 15 } : tc
+      ),
+    }));
+
+    const steps = [35, 65, 90, 100];
+    steps.forEach((pct, i) => {
+      setTimeout(() => {
+        set((s) => {
+          const updated = s.toolchains.map((tc) =>
+            tc.id === id
+              ? {
+                  ...tc,
+                  progress: pct,
+                  installing: pct < 100,
+                  installed: pct === 100 ? true : tc.installed,
+                }
+              : tc
+          );
+          if (pct === 100) {
+            persistState(s.projects, s.settings, s.apkArtifacts, updated);
+            const target = updated.find((t) => t.id === id);
+            if (target) {
+              get().appendLogcat(
+                'I',
+                'SdkManager',
+                `Installed & verified ${target.name} v${target.version} at ${target.binaryPath}`
+              );
+            }
+          }
+          return { toolchains: updated };
+        });
+      }, (i + 1) * 260);
+    });
+  },
+
+  installAllToolchains: () => {
+    const state = get();
+    state.toolchains.forEach((tc) => {
+      get().installToolchain(tc.id);
+    });
+  },
+
   projects: initialData.projects,
   activeProjectId: firstProject.id,
 
@@ -299,7 +467,12 @@ export const useIdeStore = create<IdeState>((set, get) => ({
     if (!target) return;
 
     const mainFile =
-      target.files.find((f) => f.name.startsWith('MainActivity') || f.name === 'App.tsx')?.path ||
+      target.files.find(
+        (f) =>
+          f.name.startsWith('MainActivity') ||
+          f.name === 'main.dart' ||
+          f.name === 'App.tsx'
+      )?.path ||
       target.files.find((f) => f.type === 'file')?.path ||
       null;
     const xmlFile = target.files.find((f) => f.name === 'activity_main.xml')?.path;
@@ -339,12 +512,17 @@ export const useIdeStore = create<IdeState>((set, get) => ({
   createProject: (params) => {
     const state = get();
     const now = Date.now();
+    const perms = params.permissions || [
+      'android.permission.INTERNET',
+      'android.permission.VIBRATE',
+    ];
     const files = generateProjectFiles({
       name: params.name,
       packageName: params.packageName,
       language: params.language,
       template: params.template,
       minSdk: params.minSdk,
+      permissions: perms,
     });
 
     const snapshot: Record<string, string> = {};
@@ -362,6 +540,7 @@ export const useIdeStore = create<IdeState>((set, get) => ({
       template: params.template,
       minSdk: params.minSdk,
       buildSystem: params.buildSystem,
+      permissions: perms,
       storagePath: `${state.settings.storageLocation}/Projects/${params.name.replace(/\s+/g, '')}`,
       createdAt: now,
       updatedAt: now,
@@ -374,7 +553,7 @@ export const useIdeStore = create<IdeState>((set, get) => ({
           {
             id: `commit-${now}`,
             hash: Math.random().toString(16).substring(2, 9),
-            message: `Initial project created with ${params.template} template`,
+            message: `Initial ${params.language} project created with ${params.template} template`,
             author: 'Mobile Dev',
             timestamp: now,
             branch: 'main',
@@ -386,10 +565,15 @@ export const useIdeStore = create<IdeState>((set, get) => ({
     };
 
     const updatedProjects = [newProj, ...state.projects];
-    persistState(updatedProjects, state.settings, state.apkArtifacts);
+    persistState(updatedProjects, state.settings, state.apkArtifacts, state.toolchains);
 
     const mainFile =
-      newProj.files.find((f) => f.name.startsWith('MainActivity') || f.name === 'App.tsx')?.path ||
+      newProj.files.find(
+        (f) =>
+          f.name.startsWith('MainActivity') ||
+          f.name === 'main.dart' ||
+          f.name === 'App.tsx'
+      )?.path ||
       newProj.files.find((f) => f.type === 'file')?.path ||
       null;
 
@@ -427,7 +611,11 @@ export const useIdeStore = create<IdeState>((set, get) => ({
       terminalCwd: newProj.storagePath,
     });
 
-    get().appendLogcat('I', 'ProjectManager', `Created project ${newProj.name} (${newProj.packageName})`);
+    get().appendLogcat(
+      'I',
+      'ProjectManager',
+      `Created ${newProj.language} project ${newProj.name} (${newProj.packageName})`
+    );
     return newProj;
   },
 
@@ -441,14 +629,32 @@ export const useIdeStore = create<IdeState>((set, get) => ({
       }
     });
 
+    const detectedLang: ProjectLanguage = files.some((f) => f.name.endsWith('.dart'))
+      ? 'Flutter'
+      : files.some((f) => f.name.endsWith('.tsx') || f.name.endsWith('.jsx'))
+      ? 'React'
+      : files.some((f) => f.name.endsWith('.kt'))
+      ? 'Kotlin'
+      : 'Java';
+
+    const detectedBuild: ProjectBuildSystem =
+      detectedLang === 'Flutter'
+        ? 'Flutter + Gradle'
+        : detectedLang === 'React'
+        ? 'React Vite + Capacitor'
+        : detectedLang === 'Kotlin'
+        ? 'Kotlin Gradle DSL'
+        : 'Java Groovy Gradle';
+
     const newProj: Project = {
       id: `proj-zip-${now}`,
       name,
       packageName,
-      language: files.some((f) => f.name.endsWith('.kt')) ? 'Kotlin' : 'Java',
+      language: detectedLang,
       template: 'empty_activity',
       minSdk: 'Android 8.0 (API 26)',
-      buildSystem: 'Gradle (Kotlin DSL)',
+      buildSystem: detectedBuild,
+      permissions: ['android.permission.INTERNET', 'android.permission.VIBRATE'],
       storagePath: `${state.settings.storageLocation}/Projects/${name}`,
       createdAt: now,
       updatedAt: now,
@@ -473,7 +679,7 @@ export const useIdeStore = create<IdeState>((set, get) => ({
     };
 
     const updatedProjects = [newProj, ...state.projects];
-    persistState(updatedProjects, state.settings, state.apkArtifacts);
+    persistState(updatedProjects, state.settings, state.apkArtifacts, state.toolchains);
     get().selectProject(newProj.id);
     get().appendLogcat('I', 'ZipImporter', `Imported ZIP archive into ${newProj.storagePath}`);
   },
@@ -482,12 +688,143 @@ export const useIdeStore = create<IdeState>((set, get) => ({
     const state = get();
     if (state.projects.length <= 1) return;
     const remaining = state.projects.filter((p) => p.id !== projectId);
-    persistState(remaining, state.settings, state.apkArtifacts);
+    persistState(remaining, state.settings, state.apkArtifacts, state.toolchains);
     if (state.activeProjectId === projectId) {
       get().selectProject(remaining[0].id);
     } else {
       set({ projects: remaining });
     }
+  },
+
+  setProjectBuildConfig: (language, buildSystem) => {
+    const state = get();
+    const activeProject = state.projects.find((p) => p.id === state.activeProjectId);
+    if (!activeProject) return;
+
+    // Ensure the project has an entry point for the chosen language if switched
+    let nextFiles = [...activeProject.files];
+    const pkgPath = activeProject.packageName.replace(/\./g, '/');
+    const now = Date.now();
+
+    if (language === 'Flutter' && !nextFiles.some((f) => f.name === 'main.dart')) {
+      const flutterTpl = generateProjectFiles({
+        name: activeProject.name,
+        packageName: activeProject.packageName,
+        language: 'Flutter',
+        template: 'flutter_app',
+        minSdk: activeProject.minSdk,
+        permissions: activeProject.permissions,
+      });
+      flutterTpl.forEach((node) => {
+        if (!nextFiles.some((existing) => existing.path === node.path)) {
+          nextFiles.push(node);
+        }
+      });
+    } else if (language === 'React' && !nextFiles.some((f) => f.name === 'App.tsx')) {
+      const reactTpl = generateProjectFiles({
+        name: activeProject.name,
+        packageName: activeProject.packageName,
+        language: 'React',
+        template: 'react_webview',
+        minSdk: activeProject.minSdk,
+        permissions: activeProject.permissions,
+      });
+      reactTpl.forEach((node) => {
+        if (!nextFiles.some((existing) => existing.path === node.path)) {
+          nextFiles.push(node);
+        }
+      });
+    } else if (language === 'Java' && !nextFiles.some((f) => f.name === 'MainActivity.java')) {
+      nextFiles.push({
+        id: `file-java-${now}`,
+        name: 'MainActivity.java',
+        path: `app/src/main/java/${pkgPath}/MainActivity.java`,
+        type: 'file',
+        language: 'java',
+        lastModified: now,
+        content: `package ${activeProject.packageName};\n\nimport android.os.Bundle;\nimport androidx.appcompat.app.AppCompatActivity;\n\npublic class MainActivity extends AppCompatActivity {\n    @Override\n    protected void onCreate(Bundle savedInstanceState) {\n        super.onCreate(savedInstanceState);\n        setContentView(R.layout.activity_main);\n    }\n}\n`,
+      });
+    } else if (language === 'Kotlin' && !nextFiles.some((f) => f.name === 'MainActivity.kt')) {
+      nextFiles.push({
+        id: `file-kt-${now}`,
+        name: 'MainActivity.kt',
+        path: `app/src/main/java/${pkgPath}/MainActivity.kt`,
+        type: 'file',
+        language: 'kotlin',
+        lastModified: now,
+        content: `package ${activeProject.packageName}\n\nimport android.os.Bundle\nimport androidx.appcompat.app.AppCompatActivity\n\nclass MainActivity : AppCompatActivity() {\n    override fun onCreate(savedInstanceState: Bundle?) {\n        super.onCreate(savedInstanceState)\n        setContentView(R.layout.activity_main)\n    }\n}\n`,
+      });
+    }
+
+    const updatedProjects = state.projects.map((p) =>
+      p.id === state.activeProjectId
+        ? { ...p, language, buildSystem, files: nextFiles, updatedAt: now }
+        : p
+    );
+
+    persistState(updatedProjects, state.settings, state.apkArtifacts, state.toolchains);
+    set({ projects: updatedProjects });
+
+    // Open corresponding main file
+    const targetEntry =
+      language === 'Flutter'
+        ? nextFiles.find((f) => f.name === 'main.dart')?.path
+        : language === 'React'
+        ? nextFiles.find((f) => f.name === 'App.tsx')?.path
+        : language === 'Java'
+        ? nextFiles.find((f) => f.name === 'MainActivity.java')?.path
+        : nextFiles.find((f) => f.name === 'MainActivity.kt')?.path;
+
+    if (targetEntry) {
+      get().openFile(targetEntry);
+    }
+
+    get().appendLogcat(
+      'I',
+      'BuildConfig',
+      `Switched project build target to ${language} (${buildSystem})`
+    );
+  },
+
+  toggleProjectPermission: (permissionId) => {
+    const state = get();
+    const proj = state.projects.find((p) => p.id === state.activeProjectId);
+    if (!proj) return;
+
+    const currentPerms = proj.permissions || ['android.permission.INTERNET'];
+    const exists = currentPerms.includes(permissionId);
+    const nextPerms = exists
+      ? currentPerms.filter((p) => p !== permissionId)
+      : [...currentPerms, permissionId];
+
+    // Also synchronize AndroidManifest.xml content
+    const updatedFiles = proj.files.map((f) => {
+      if (f.name === 'AndroidManifest.xml' && f.content) {
+        const permBlock = nextPerms
+          .map((p) => `    <uses-permission android:name="${p}" />`)
+          .join('\n');
+        const cleaned = f.content.replace(
+          /(\s*<uses-permission[^>]*\/>\s*)+/g,
+          `\n${permBlock}\n\n`
+        );
+        return { ...f, content: cleaned, lastModified: Date.now() };
+      }
+      return f;
+    });
+
+    const updatedProjects = state.projects.map((p) =>
+      p.id === state.activeProjectId
+        ? { ...p, permissions: nextPerms, files: updatedFiles, updatedAt: Date.now() }
+        : p
+    );
+
+    persistState(updatedProjects, state.settings, state.apkArtifacts, state.toolchains);
+    set({ projects: updatedProjects });
+    get().appendLogcat(
+      'I',
+      'ManifestMerger',
+      `${exists ? 'Removed' : 'Added'} permission ${permissionId} in AndroidManifest.xml`
+    );
   },
 
   openTabs: initialTabs,
@@ -563,7 +900,7 @@ export const useIdeStore = create<IdeState>((set, get) => ({
       return { ...t, undoStack: nextUndo, redoStack: [] };
     });
 
-    persistState(updatedProjects, state.settings, state.apkArtifacts);
+    persistState(updatedProjects, state.settings, state.apkArtifacts, state.toolchains);
     set({ projects: updatedProjects, openTabs: updatedTabs });
   },
 
@@ -596,7 +933,7 @@ export const useIdeStore = create<IdeState>((set, get) => ({
         t.filePath === filePath ? { ...t, undoStack: nextUndo, redoStack: nextRedo } : t
       ),
     });
-    persistState(updatedProjects, state.settings, state.apkArtifacts);
+    persistState(updatedProjects, state.settings, state.apkArtifacts, state.toolchains);
   },
 
   redoEdit: (filePath) => {
@@ -628,7 +965,7 @@ export const useIdeStore = create<IdeState>((set, get) => ({
         t.filePath === filePath ? { ...t, undoStack: nextUndo, redoStack: nextRedo } : t
       ),
     });
-    persistState(updatedProjects, state.settings, state.apkArtifacts);
+    persistState(updatedProjects, state.settings, state.apkArtifacts, state.toolchains);
   },
 
   setXmlViewMode: (filePath, mode) => {
@@ -654,6 +991,8 @@ export const useIdeStore = create<IdeState>((set, get) => ({
         ? `package com.example.app\n\nclass ${cleanName.replace('.kt', '')} {\n    \n}\n`
         : cleanName.endsWith('.java')
         ? `package com.example.app;\n\npublic class ${cleanName.replace('.java', '')} {\n    \n}\n`
+        : cleanName.endsWith('.dart')
+        ? `import 'package:flutter/material.dart';\n\nclass ${cleanName.replace('.dart', '')} extends StatelessWidget {\n  const ${cleanName.replace('.dart', '')}({super.key});\n\n  @override\n  Widget build(BuildContext context) {\n    return const Scaffold(\n      body: Center(child: Text('${cleanName}')),\n    );\n  }\n}\n`
         : cleanName.endsWith('.xml')
         ? `<?xml version="1.0" encoding="utf-8"?>\n<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"\n    android:layout_width="match_parent"\n    android:layout_height="match_parent"\n    android:orientation="vertical"\n    android:padding="16dp">\n\n    <TextView\n        android:id="@+id/tvNew"\n        android:layout_width="match_parent"\n        android:layout_height="wrap_content"\n        android:text="${cleanName}"\n        android:textSize="18sp" />\n\n</LinearLayout>\n`
         : '';
@@ -678,7 +1017,7 @@ export const useIdeStore = create<IdeState>((set, get) => ({
       };
     });
 
-    persistState(updatedProjects, state.settings, state.apkArtifacts);
+    persistState(updatedProjects, state.settings, state.apkArtifacts, state.toolchains);
     set({ projects: updatedProjects });
 
     if (type === 'file') {
@@ -725,7 +1064,7 @@ export const useIdeStore = create<IdeState>((set, get) => ({
       t.filePath === oldPath ? { ...t, filePath: newPath } : t
     );
 
-    persistState(updatedProjects, state.settings, state.apkArtifacts);
+    persistState(updatedProjects, state.settings, state.apkArtifacts, state.toolchains);
     set({
       projects: updatedProjects,
       openTabs: updatedTabs,
@@ -758,7 +1097,7 @@ export const useIdeStore = create<IdeState>((set, get) => ({
       nextActive = updatedTabs.length > 0 ? updatedTabs[updatedTabs.length - 1].filePath : null;
     }
 
-    persistState(updatedProjects, state.settings, state.apkArtifacts);
+    persistState(updatedProjects, state.settings, state.apkArtifacts, state.toolchains);
     set({
       projects: updatedProjects,
       openTabs: updatedTabs,
@@ -791,13 +1130,13 @@ export const useIdeStore = create<IdeState>((set, get) => ({
     {
       id: 't-init-1',
       type: 'info',
-      text: 'CodeStudio Mobile Shell (ARM64 Android Sandbox · OpenJDK 17 · Gradle 8.7)',
+      text: 'CodeStudio Mobile Shell (ARM64 Android · Kotlin 2.0 · OpenJDK 17 · Gradle 8.7 · React 19 · Flutter 3.24)',
       timestamp: Date.now() - 5000,
     },
     {
       id: 't-init-2',
       type: 'output',
-      text: `Working directory: ${firstProject.storagePath}\nType "help" to list supported commands or run "./gradlew assembleDebug"`,
+      text: `Working directory: ${firstProject.storagePath}\nType "help" to list all commands, "./gradlew assembleDebug", "flutter build apk", or "sdkmanager --list"`,
       timestamp: Date.now() - 4000,
     },
   ],
@@ -810,7 +1149,6 @@ export const useIdeStore = create<IdeState>((set, get) => ({
 
     const state = get();
     const activeProject = state.projects.find((p) => p.id === state.activeProjectId) || state.projects[0];
-    const now = Date.now();
 
     const appendLines = (newItems: Omit<TerminalLine, 'id' | 'timestamp'>[]) => {
       set((s) => ({
@@ -855,10 +1193,13 @@ export const useIdeStore = create<IdeState>((set, get) => ({
             '  ./gradlew assembleDebug    Compile & package Debug APK',
             '  ./gradlew assembleRelease  Compile & package Release APK',
             '  ./gradlew bundleRelease    Build Android App Bundle (.aab)',
-            '  ./gradlew clean            Clean build outputs',
+            '  flutter doctor | build apk Run Flutter SDK & Dart AOT compiler',
+            '  npm install | npm run build Run React + Vite + Capacitor build',
+            '  kotlinc -version | javac   Check Kotlin & Java JDK compilers',
+            '  sdkmanager --list          List installed Android SDK & Toolchains',
+            '  pkg install <package>      Install/verify toolchain package',
             '  git status | branch | log  Inspect Git repository state',
-            '  adb devices                List attached Android devices',
-            '  npm -v | node -v           Check hybrid web toolchain versions',
+            '  adb devices | adb install  Manage Android Debug Bridge devices',
             '  clear                      Clear terminal history',
           ].join('\n'),
         },
@@ -868,6 +1209,21 @@ export const useIdeStore = create<IdeState>((set, get) => ({
 
     if (base === 'pwd') {
       appendLines([{ type: 'output', text: state.terminalCwd }]);
+      return;
+    }
+
+    if (base === 'whoami') {
+      appendLines([{ type: 'output', text: 'u0_a294 (codestudio_mobile)' }]);
+      return;
+    }
+
+    if (base === 'uname') {
+      appendLines([{ type: 'output', text: 'Linux localhost 6.1.68-android14-11-g84f2 aarch64 Android' }]);
+      return;
+    }
+
+    if (base === 'echo') {
+      appendLines([{ type: 'output', text: parts.slice(1).join(' ').replace(/^["']|["']$/g, '') }]);
       return;
     }
 
@@ -988,8 +1344,118 @@ export const useIdeStore = create<IdeState>((set, get) => ({
       return;
     }
 
+    if (base === 'kotlinc') {
+      appendLines([
+        {
+          type: 'output',
+          text: 'info: kotlinc-jvm 2.0.20 (JRE 17.0.11+9-android-arm64)\nKotlin K2 compiler ready.',
+        },
+      ]);
+      return;
+    }
+
+    if (base === 'java' || base === 'javac') {
+      appendLines([
+        {
+          type: 'output',
+          text: 'openjdk version "17.0.11" 2024-04-16 LTS\nOpenJDK Runtime Environment (build 17.0.11+9-ARM64)\nOpenJDK 64-Bit Server VM (build 17.0.11+9, mixed mode)',
+        },
+      ]);
+      return;
+    }
+
+    if (base === 'flutter' || base === 'dart') {
+      if (arg1 === 'doctor') {
+        appendLines([
+          {
+            type: 'success',
+            text: [
+              'Doctor summary (to see all details, run flutter doctor -v):',
+              '[✓] Flutter (Channel stable, 3.24.1, on Android 14 aarch64)',
+              '[✓] Android toolchain - develop for Android devices (Android SDK version 34.0.0)',
+              '[✓] Kotlin & OpenJDK 17 bundled runtime',
+              '[✓] Connected device (1 available: This Device ARM64)',
+              '• No issues found!',
+            ].join('\n'),
+          },
+        ]);
+      } else if (arg1 === 'pub' || arg1 === 'get') {
+        appendLines([
+          {
+            type: 'output',
+            text: 'Resolving dependencies in pubspec.yaml...\n+ cupertino_icons 1.0.8\n+ flutter 0.0.0 from sdk flutter\n+ material_color_utilities 0.11.1\nGot dependencies!',
+          },
+        ]);
+      } else if (arg1 === 'build' || arg1 === 'run') {
+        appendLines([
+          {
+            type: 'info',
+            text: `Running Gradle task 'assembleDebug' for Flutter project ${activeProject.name}...`,
+          },
+        ]);
+        get().triggerBuild('apk');
+        setTimeout(() => {
+          appendLines([
+            {
+              type: 'success',
+              text: `✓ Built build/app/outputs/flutter-apk/${activeProject.name}-debug.apk (2.4MB)`,
+            },
+          ]);
+        }, 1500);
+      } else {
+        appendLines([
+          {
+            type: 'output',
+            text: 'Flutter 3.24.1 • channel stable • Dart 3.5.0 • DevTools 2.37.2',
+          },
+        ]);
+      }
+      return;
+    }
+
+    if (base === 'sdkmanager' || base === 'pkg') {
+      if (arg1 === '--list' || arg1 === 'list') {
+        appendLines([
+          {
+            type: 'output',
+            text: state.toolchains
+              .map(
+                (t) =>
+                  `[${t.installed ? 'INSTALLED' : 'AVAILABLE'}] ${t.name} (v${t.version}) - ${t.sizeMb} MB`
+              )
+              .join('\n'),
+          },
+        ]);
+      } else if (arg1 === 'install' || arg1 === '--install') {
+        get().installAllToolchains();
+        appendLines([
+          {
+            type: 'success',
+            text: 'Downloading & verifying Kotlin 2.0.20, OpenJDK 17, Gradle 8.7, React Node 22, Flutter 3.24, and Android SDK 34...\nAll SDK packages verified 100%!',
+          },
+        ]);
+      } else {
+        appendLines([
+          {
+            type: 'info',
+            text: 'Usage: sdkmanager --list | pkg install <kotlin|java|gradle|flutter|react>',
+          },
+        ]);
+      }
+      return;
+    }
+
     if (base === './gradlew' || base === 'gradle') {
       const task = arg1 || 'assembleDebug';
+      if (task === '-v' || task === '--version') {
+        appendLines([
+          {
+            type: 'output',
+            text: '------------------------------------------------------------\nGradle 8.7\n------------------------------------------------------------\nKotlin:       2.0.20\nGroovy:       3.0.21\nJVM:          17.0.11 (OpenJDK ARM64)',
+          },
+        ]);
+        return;
+      }
       if (task === 'clean') {
         get().triggerBuild('clean');
         appendLines([
@@ -999,7 +1465,7 @@ export const useIdeStore = create<IdeState>((set, get) => ({
         appendLines([
           {
             type: 'info',
-            text: `Starting a Gradle Daemon (subsequent builds will be faster)\n> Task :app:compileReleaseKotlin\n> Task :app:mergeReleaseResources\n> Task :app:bundleRelease`,
+            text: `Starting a Gradle Daemon (subsequent builds will be faster)\n> Task :app:compileReleaseSources\n> Task :app:mergeReleaseResources\n> Task :app:bundleRelease`,
           },
         ]);
         get().triggerBuild('aab');
@@ -1019,7 +1485,7 @@ export const useIdeStore = create<IdeState>((set, get) => ({
         appendLines([
           {
             type: 'output',
-            text: `> Task :app:compile${isRel ? 'Release' : 'Debug'}Kotlin\n> Task :app:merge${isRel ? 'Release' : 'Debug'}Resources\n> Task :app:process${isRel ? 'Release' : 'Debug'}MainManifest\n> Task :app:dexBuilder${isRel ? 'Release' : 'Debug'}\n> Task :app:package${isRel ? 'Release' : 'Debug'}`,
+            text: `> Task :app:compile${isRel ? 'Release' : 'Debug'}Sources\n> Task :app:merge${isRel ? 'Release' : 'Debug'}Resources\n> Task :app:process${isRel ? 'Release' : 'Debug'}MainManifest\n> Task :app:dexBuilder${isRel ? 'Release' : 'Debug'}\n> Task :app:package${isRel ? 'Release' : 'Debug'}`,
           },
         ]);
         get().triggerBuild('apk');
@@ -1103,6 +1569,19 @@ export const useIdeStore = create<IdeState>((set, get) => ({
               .join('\n')}`,
           },
         ]);
+      } else if (arg1 === 'install') {
+        const latestApk = state.apkArtifacts[0];
+        if (latestApk) {
+          get().setActiveInstallApk(latestApk);
+          appendLines([
+            {
+              type: 'success',
+              text: `Performing Streamed Install of ${latestApk.fileName}...\nSuccess`,
+            },
+          ]);
+        } else {
+          appendLines([{ type: 'error', text: 'adb: no APK found. Run ./gradlew assembleDebug first.' }]);
+        }
       } else {
         appendLines([
           {
@@ -1114,13 +1593,30 @@ export const useIdeStore = create<IdeState>((set, get) => ({
       return;
     }
 
-    if (base === 'npm' || base === 'node') {
-      appendLines([
-        {
-          type: 'output',
-          text: base === 'node' ? 'v22.4.0 (ARM64 Android)' : '10.8.1',
-        },
-      ]);
+    if (base === 'npm' || base === 'node' || base === 'npx') {
+      if (arg1 === 'install' || arg1 === 'i') {
+        appendLines([
+          {
+            type: 'success',
+            text: 'added 64 packages, and audited 65 packages in 780ms\nfound 0 vulnerabilities',
+          },
+        ]);
+      } else if (arg1 === 'run') {
+        appendLines([
+          {
+            type: 'info',
+            text: 'vite v8.3.0 building client bundle for Android Capacitor WebView...',
+          },
+        ]);
+        get().triggerBuild('apk');
+      } else {
+        appendLines([
+          {
+            type: 'output',
+            text: base === 'node' ? 'v22.4.0 (ARM64 Android)' : '10.8.1',
+          },
+        ]);
+      }
       return;
     }
 
@@ -1141,7 +1637,7 @@ export const useIdeStore = create<IdeState>((set, get) => ({
   buildSteps: INITIAL_BUILD_STEPS,
   buildLogs: [
     '> Task :app:preBuild UP-TO-DATE',
-    '> Task :app:compileDebugKotlin (420ms)',
+    '> Task :app:compileDebugSources (420ms)',
     '> Task :app:mergeDebugResources (310ms)',
     '> Task :app:processDebugMainManifest (140ms)',
     '> Task :app:dexBuilderDebug (510ms)',
@@ -1150,7 +1646,7 @@ export const useIdeStore = create<IdeState>((set, get) => ({
   ],
   apkArtifacts: initialData.apkArtifacts,
 
-  triggerBuild: (format) => {
+  triggerBuild: (format, autoInstall = false) => {
     const state = get();
     if (state.isBuilding) return;
 
@@ -1170,34 +1666,43 @@ export const useIdeStore = create<IdeState>((set, get) => ({
       return;
     }
 
+    const compilerTask =
+      activeProject.language === 'Flutter'
+        ? `:app:compileFlutterBuild${variantCap}`
+        : activeProject.language === 'React'
+        ? `:app:bundleReactCapacitor${variantCap}`
+        : activeProject.language === 'Java'
+        ? `:app:compile${variantCap}JavaWithJavac`
+        : `:app:compile${variantCap}Kotlin`;
+
     const steps: BuildStepStatus[] = [
       {
         id: 'step-kotlin',
-        label: `${activeProject.language} compilation`,
-        taskName: `:app:compile${variantCap}${activeProject.language === 'Java' ? 'JavaWithJavac' : 'Kotlin'}`,
+        label: `${activeProject.language} source compilation (${activeProject.buildSystem})`,
+        taskName: compilerTask,
         status: 'running',
       },
       {
         id: 'step-res',
-        label: 'Resource compilation',
+        label: 'Resource compilation (AAPT2)',
         taskName: `:app:merge${variantCap}Resources`,
         status: 'pending',
       },
       {
         id: 'step-manifest',
-        label: 'Manifest processing',
+        label: `Manifest & Permissions (${(activeProject.permissions || []).length} permissions)`,
         taskName: `:app:process${variantCap}MainManifest`,
         status: 'pending',
       },
       {
         id: 'step-dex',
-        label: 'DEX generation',
+        label: 'DEX bytecode generation (D8)',
         taskName: `:app:dexBuilder${variantCap}`,
         status: 'pending',
       },
       {
         id: 'step-pkg',
-        label: format === 'aab' ? 'AAB bundle packaging' : 'APK packaging',
+        label: format === 'aab' ? 'AAB bundle packaging' : 'APK packaging & v2 signing',
         taskName: format === 'aab' ? `:app:bundle${variantCap}` : `:app:package${variantCap}`,
         status: 'pending',
       },
@@ -1207,7 +1712,7 @@ export const useIdeStore = create<IdeState>((set, get) => ({
       isBuilding: true,
       buildSteps: steps,
       buildLogs: [
-        `Starting Gradle ${state.settings.gradleVersion} daemon (${state.settings.jdkVersion})...`,
+        `Starting ${activeProject.buildSystem} (${state.settings.jdkVersion})...`,
         ...(state.cleanBeforeBuild || format === 'rebuild' ? ['> Task :app:clean (190ms)'] : []),
       ],
     });
@@ -1215,12 +1720,12 @@ export const useIdeStore = create<IdeState>((set, get) => ({
     get().appendLogcat(
       'I',
       'GradleBuild',
-      `Started ${format.toUpperCase()} (${state.buildVariant}) build for ${activeProject.packageName}`
+      `Started ${format.toUpperCase()} (${state.buildVariant}) build for ${activeProject.name} [${activeProject.language}]`
     );
 
     steps.forEach((step, idx) => {
       setTimeout(() => {
-        const dur = 220 + Math.floor(Math.random() * 280);
+        const dur = 200 + Math.floor(Math.random() * 240);
         set((s) => {
           const nextSteps = s.buildSteps.map((st, i) => {
             if (i < idx) return st;
@@ -1235,37 +1740,41 @@ export const useIdeStore = create<IdeState>((set, get) => ({
           const outPath = `app/build/outputs/${outDir}/${state.buildVariant}/${fileName}`;
 
           let nextApks = s.apkArtifacts;
+          let createdArtifact: ApkArtifact | null = null;
           if (isLast) {
-            const newArtifact: ApkArtifact = {
+            const projPerms = activeProject.permissions || [
+              'android.permission.INTERNET',
+              'android.permission.VIBRATE',
+            ];
+            createdArtifact = {
               id: `apk-${Date.now()}`,
               fileName,
               projectId: activeProject.id,
               projectName: activeProject.name,
               packageName: activeProject.packageName,
+              language: activeProject.language,
+              buildSystem: activeProject.buildSystem,
               variant: state.buildVariant,
               format: format === 'aab' ? 'aab' : 'apk',
               versionName: '1.0.' + (s.apkArtifacts.length + 1),
               versionCode: s.apkArtifacts.length + 1,
               minSdk: activeProject.minSdk,
               targetSdk: state.settings.androidSdkVersion,
-              sizeBytes: 2150000 + Math.floor(Math.random() * 950000),
+              sizeBytes: 2250000 + Math.floor(Math.random() * 950000),
               createdAt: Date.now(),
               outputPath: outPath,
-              permissions: [
-                'android.permission.INTERNET',
-                'android.permission.ACCESS_NETWORK_STATE',
-                'android.permission.VIBRATE',
-              ],
+              permissions: projPerms,
+              grantedPermissions: projPerms,
               activities: [`${activeProject.packageName}.MainActivity`],
               services: ['androidx.appcompat.app.AppLocalesMetadataHolderService'],
               installedOnDeviceIds: ['dev-local-phone'],
             };
-            nextApks = [newArtifact, ...s.apkArtifacts];
-            persistState(s.projects, s.settings, nextApks);
+            nextApks = [createdArtifact, ...s.apkArtifacts];
+            persistState(s.projects, s.settings, nextApks, s.toolchains);
             get().appendLogcat(
               'I',
               'PackageManager',
-              `Generated artifact ${fileName} (${(newArtifact.sizeBytes / (1024 * 1024)).toFixed(2)} MB) at ${outPath}`
+              `Generated ${activeProject.language} artifact ${fileName} at ${outPath}`
             );
           }
 
@@ -1273,24 +1782,25 @@ export const useIdeStore = create<IdeState>((set, get) => ({
             buildSteps: nextSteps,
             isBuilding: !isLast,
             apkArtifacts: nextApks,
+            activeInstallApk: isLast && autoInstall && createdArtifact ? createdArtifact : s.activeInstallApk,
             buildLogs: [
               ...s.buildLogs,
               `> Task ${step.taskName} (${dur}ms)`,
               ...(isLast
                 ? [
                     '',
-                    'BUILD SUCCESSFUL in 1s 580ms',
+                    'BUILD SUCCESSFUL in 1s 420ms',
                     `Artifact output: ${outPath}`,
                   ]
                 : []),
             ],
           };
         });
-      }, (idx + 1) * 280);
+      }, (idx + 1) * 240);
     });
   },
 
-  installApkOnDevice: (apkId, deviceId = 'dev-local-phone') => {
+  installApkOnDevice: (apkId, grantedPerms, deviceId = 'dev-local-phone') => {
     const state = get();
     const apk = state.apkArtifacts.find((a) => a.id === apkId);
     if (!apk) return;
@@ -1299,6 +1809,7 @@ export const useIdeStore = create<IdeState>((set, get) => ({
       a.id === apkId
         ? {
             ...a,
+            grantedPermissions: grantedPerms || a.permissions,
             installedOnDeviceIds: Array.from(new Set([...a.installedOnDeviceIds, deviceId])),
           }
         : a
@@ -1313,19 +1824,19 @@ export const useIdeStore = create<IdeState>((set, get) => ({
         : d
     );
 
-    persistState(state.projects, state.settings, updatedApks);
+    persistState(state.projects, state.settings, updatedApks, state.toolchains);
     set({ apkArtifacts: updatedApks, devices: updatedDevices });
     get().appendLogcat(
       'I',
-      'ActivityManager',
-      `Installed ${apk.fileName} (${apk.packageName}) onto ${deviceId} — Launching .MainActivity`
+      'PackageInstaller',
+      `100% Installed ${apk.fileName} (${apk.packageName}) with ${(grantedPerms || apk.permissions).length} granted permissions — Ready to run`
     );
   },
 
   deleteApkArtifact: (apkId) => {
     const state = get();
     const updated = state.apkArtifacts.filter((a) => a.id !== apkId);
-    persistState(state.projects, state.settings, updated);
+    persistState(state.projects, state.settings, updated, state.toolchains);
     set({ apkArtifacts: updated });
   },
 
@@ -1339,7 +1850,7 @@ export const useIdeStore = create<IdeState>((set, get) => ({
       pid: 14280,
       level: 'I',
       tag: 'MainActivity',
-      message: 'App started: MyApp on SDK 26+',
+      message: 'App started: MyApp on SDK 26+ (Toolchains verified: Kotlin, Java, Gradle, React, Flutter)',
       packageName: 'com.example.myapp',
     },
     {
@@ -1347,26 +1858,8 @@ export const useIdeStore = create<IdeState>((set, get) => ({
       timestamp: formatTimeNow(),
       pid: 14280,
       level: 'D',
-      tag: 'MyApp',
-      message: 'View hierarchy inflated from R.layout.activity_main (4 child views)',
-      packageName: 'com.example.myapp',
-    },
-    {
-      id: 'log-3',
-      timestamp: formatTimeNow(),
-      pid: 14280,
-      level: 'W',
-      tag: 'System',
-      message: 'ClassLoader referenced unknown path: /data/app/com.example.myapp/lib/arm64',
-      packageName: 'com.example.myapp',
-    },
-    {
-      id: 'log-4',
-      timestamp: formatTimeNow(),
-      pid: 14280,
-      level: 'E',
-      tag: 'NetworkSync',
-      message: 'Offline mode active: cached Gradle dependencies resolved from local m2 repository',
+      tag: 'PackageInstaller',
+      message: 'Runtime permissions granted: INTERNET, VIBRATE, POST_NOTIFICATIONS',
       packageName: 'com.example.myapp',
     },
   ],
@@ -1401,9 +1894,13 @@ export const useIdeStore = create<IdeState>((set, get) => ({
       apiLevel: 34,
       status: 'connected',
       ipAddress: '127.0.0.1:5555',
-      batteryLevel: 88,
+      batteryLevel: 94,
       abi: 'arm64-v8a',
-      installedPackages: ['com.example.myapp', 'com.codestudio.notesapp'],
+      installedPackages: [
+        'com.example.myapp',
+        'com.codestudio.fluttershop',
+        'com.codestudio.notesapp',
+      ],
     },
     {
       id: 'dev-usb-otg',
@@ -1498,7 +1995,7 @@ export const useIdeStore = create<IdeState>((set, get) => ({
       };
     });
 
-    persistState(updatedProjects, state.settings, state.apkArtifacts);
+    persistState(updatedProjects, state.settings, state.apkArtifacts, state.toolchains);
     set({ projects: updatedProjects });
     get().appendLogcat(
       'I',
@@ -1523,7 +2020,7 @@ export const useIdeStore = create<IdeState>((set, get) => ({
         },
       };
     });
-    persistState(updatedProjects, state.settings, state.apkArtifacts);
+    persistState(updatedProjects, state.settings, state.apkArtifacts, state.toolchains);
     set({ projects: updatedProjects });
   },
 
@@ -1539,7 +2036,7 @@ export const useIdeStore = create<IdeState>((set, get) => ({
         },
       };
     });
-    persistState(updatedProjects, state.settings, state.apkArtifacts);
+    persistState(updatedProjects, state.settings, state.apkArtifacts, state.toolchains);
     set({ projects: updatedProjects });
   },
 
@@ -1558,7 +2055,7 @@ export const useIdeStore = create<IdeState>((set, get) => ({
       language: 'Kotlin',
       template: 'basic_activity',
       minSdk: 'Android 8.0 (API 26)',
-      buildSystem: 'Gradle (Kotlin DSL)',
+      buildSystem: 'Kotlin Gradle DSL',
     });
 
     const state = get();
@@ -1575,7 +2072,7 @@ export const useIdeStore = create<IdeState>((set, get) => ({
           }
         : p
     );
-    persistState(updatedProjects, state.settings, state.apkArtifacts);
+    persistState(updatedProjects, state.settings, state.apkArtifacts, state.toolchains);
     set({ projects: updatedProjects, gitCloneModalOpen: false });
   },
 
@@ -1584,7 +2081,7 @@ export const useIdeStore = create<IdeState>((set, get) => ({
   updateSettings: (partial) => {
     const state = get();
     const next = { ...state.settings, ...partial };
-    persistState(state.projects, next, state.apkArtifacts);
+    persistState(state.projects, next, state.apkArtifacts, state.toolchains);
     set({ settings: next });
   },
 }));

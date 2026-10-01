@@ -1,14 +1,17 @@
 import React, { useMemo, useRef, useState } from 'react';
 import {
   Check,
+  ClipboardPaste,
   Code2,
   Columns,
   Copy,
   CornerDownLeft,
   FileCode,
   Hash,
+  MousePointerClick,
   Redo2,
   Replace,
+  Scissors,
   Search,
   Smartphone,
   Sparkles,
@@ -16,13 +19,13 @@ import {
   X,
 } from 'lucide-react';
 import { useIdeStore } from '../../stores/ideStore';
+import { ProjectBuildSystem, ProjectLanguage } from '../../types/ide';
 import { XmlLayoutDesigner } from './XmlLayoutDesigner';
 
 function highlightLineSyntax(line: string, lang: string, enabled: boolean): React.ReactNode {
   if (!enabled || !line) return line || ' ';
 
   if (lang === 'xml' || lang === 'html') {
-    // Highlight XML tags, attributes, and quoted values
     const tokens = line.split(/(<\/?[a-zA-Z0-9_:-]+|\/>|>|[a-zA-Z0-9_:-]+="[^"]*"|<!--[\s\S]*?-->)/g);
     return tokens.map((tok, i) => {
       if (!tok) return null;
@@ -54,14 +57,13 @@ function highlightLineSyntax(line: string, lang: string, enabled: boolean): Reac
     });
   }
 
-  // Comment line
   const trimmed = line.trim();
   if (trimmed.startsWith('//') || trimmed.startsWith('#')) {
     return <span className="text-slate-500 italic">{line}</span>;
   }
 
   const keywordRegex =
-    /\b(package|import|class|interface|object|fun|val|var|override|private|public|protected|static|final|void|int|boolean|String|return|if|else|for|while|when|true|false|null|companion|const|export|default|function|from|let|async|await|plugins|android|defaultConfig|buildTypes|dependencies|implementation)\b/g;
+    /\b(package|import|class|interface|object|fun|val|var|override|private|public|protected|static|final|void|int|boolean|String|Widget|BuildContext|StatefulWidget|StatelessWidget|State|Scaffold|MaterialApp|AppBar|Column|Row|Text|ElevatedButton|FloatingActionButton|setState|extends|required|super|return|if|else|for|while|when|true|false|null|companion|const|export|default|function|from|let|async|await|plugins|android|defaultConfig|buildTypes|dependencies|implementation)\b/g;
 
   const parts = line.split(/("[^"]*"|'[^']*'|@[a-zA-Z0-9_]+|\b\d+\b)/g);
 
@@ -92,7 +94,6 @@ function highlightLineSyntax(line: string, lang: string, enabled: boolean): Reac
       );
     }
 
-    // Highlight keywords inside remaining code segment
     const subTokens = part.split(keywordRegex);
     return (
       <React.Fragment key={idx}>
@@ -112,7 +113,10 @@ function highlightLineSyntax(line: string, lang: string, enabled: boolean): Reac
 
 const MOBILE_QUICK_KEYS = [
   { label: 'Tab', insert: '    ' },
-  { label: 'Ctrl', action: 'ctrl' },
+  { label: 'Select', action: 'select_word' },
+  { label: 'Copy', action: 'copy' },
+  { label: 'Paste', action: 'paste' },
+  { label: 'Cut', action: 'cut' },
   { label: '←', action: 'left' },
   { label: '→', action: 'right' },
   { label: '{', insert: '{}' },
@@ -124,7 +128,16 @@ const MOBILE_QUICK_KEYS = [
   { label: '<', insert: '<' },
   { label: '>', insert: '>' },
   { label: '"', insert: '""' },
-  { label: ':', insert: ': ' },
+];
+
+const LANGUAGE_BUILD_OPTIONS: {
+  lang: ProjectLanguage;
+  build: ProjectBuildSystem;
+}[] = [
+  { lang: 'Kotlin', build: 'Kotlin Gradle DSL' },
+  { lang: 'Java', build: 'Java Groovy Gradle' },
+  { lang: 'React', build: 'React Vite + Capacitor' },
+  { lang: 'Flutter', build: 'Flutter + Gradle' },
 ];
 
 export const CodeEditor: React.FC = () => {
@@ -139,6 +152,9 @@ export const CodeEditor: React.FC = () => {
     undoEdit,
     redoEdit,
     setXmlViewMode,
+    setProjectBuildConfig,
+    editorClipboard,
+    setEditorClipboard,
     settings,
     appendLogcat,
   } = useIdeStore();
@@ -151,9 +167,15 @@ export const CodeEditor: React.FC = () => {
   const [replaceQuery, setReplaceQuery] = useState('');
   const [goToLineOpen, setGoToLineOpen] = useState(false);
   const [goToLineInput, setGoToLineInput] = useState('');
-  const [copiedNotice, setCopiedNotice] = useState(false);
+  const [actionToast, setActionToast] = useState<string | null>(null);
   const [activeLine, setActiveLine] = useState(1);
-  const [foldedLines, setFoldedLines] = useState<Record<number, boolean>>({});
+
+  // Selection Range tracking for interactive Select / Copy / Cut / Paste bar
+  const [selectionRange, setSelectionRange] = useState<{
+    start: number;
+    end: number;
+    text: string;
+  }>({ start: 0, end: 0, text: '' });
 
   const activeProject = useMemo(
     () => projects.find((p) => p.id === activeProjectId) || projects[0],
@@ -175,6 +197,11 @@ export const CodeEditor: React.FC = () => {
   const isXmlFile = activeFile?.name.endsWith('.xml') ?? false;
   const xmlMode = activeTab?.xmlViewMode || (isXmlFile ? 'split' : 'code');
 
+  const showEditorToast = (msg: string) => {
+    setActionToast(msg);
+    setTimeout(() => setActionToast(null), 1800);
+  };
+
   const syncScroll = () => {
     if (textareaRef.current && highlightPreRef.current) {
       highlightPreRef.current.scrollTop = textareaRef.current.scrollTop;
@@ -182,12 +209,18 @@ export const CodeEditor: React.FC = () => {
     }
   };
 
-  const handleCursorMove = () => {
-    if (!textareaRef.current) return;
-    const pos = textareaRef.current.selectionStart;
-    const textBefore = content.slice(0, pos);
-    const lineNum = textBefore.split('\n').length;
-    setActiveLine(lineNum);
+  const updateSelectionState = () => {
+    const el = textareaRef.current;
+    if (!el) return;
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    const textBefore = content.slice(0, start);
+    setActiveLine(textBefore.split('\n').length);
+    setSelectionRange({
+      start,
+      end,
+      text: end > start ? content.slice(start, end) : '',
+    });
   };
 
   const insertAtCursor = (snippet: string) => {
@@ -209,8 +242,123 @@ export const CodeEditor: React.FC = () => {
           ? start + 1
           : start + snippet.length;
       el.setSelectionRange(offset, offset);
-      handleCursorMove();
+      updateSelectionState();
     });
+  };
+
+  // Selection & Clipboard Operations (Select Word, Select Line, Select All, Copy, Cut, Paste)
+  const handleSelectWord = () => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.focus();
+    const pos = el.selectionStart;
+    let left = pos;
+    let right = pos;
+    while (left > 0 && /[a-zA-Z0-9_@.$]/.test(content[left - 1])) left--;
+    while (right < content.length && /[a-zA-Z0-9_@.$]/.test(content[right])) right++;
+    if (left === right && content.length > 0) {
+      right = Math.min(content.length, left + 1);
+    }
+    el.setSelectionRange(left, right);
+    setSelectionRange({ start: left, end: right, text: content.slice(left, right) });
+    showEditorToast('Selected word');
+  };
+
+  const handleSelectCurrentLine = () => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.focus();
+    const pos = el.selectionStart;
+    const lineStart = content.lastIndexOf('\n', pos - 1) + 1;
+    const nextNewline = content.indexOf('\n', pos);
+    const lineEnd = nextNewline === -1 ? content.length : nextNewline;
+    el.setSelectionRange(lineStart, lineEnd);
+    setSelectionRange({
+      start: lineStart,
+      end: lineEnd,
+      text: content.slice(lineStart, lineEnd),
+    });
+    showEditorToast(`Selected Line ${activeLine}`);
+  };
+
+  const handleSelectAll = () => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.focus();
+    el.setSelectionRange(0, content.length);
+    setSelectionRange({ start: 0, end: content.length, text: content });
+    showEditorToast('Selected all code');
+  };
+
+  const handleCopySelection = () => {
+    const el = textareaRef.current;
+    let textToCopy = selectionRange.text;
+    if (!textToCopy && el && el.selectionEnd > el.selectionStart) {
+      textToCopy = content.slice(el.selectionStart, el.selectionEnd);
+    }
+    if (!textToCopy) {
+      // Fallback: copy current line if nothing is highlighted
+      const lineText = lines[activeLine - 1] || content;
+      textToCopy = lineText;
+    }
+    setEditorClipboard(textToCopy);
+    navigator.clipboard?.writeText(textToCopy).catch(() => {});
+    showEditorToast(`Copied (${textToCopy.length} chars)`);
+  };
+
+  const handleCutSelection = () => {
+    if (!activeFile) return;
+    const el = textareaRef.current;
+    if (!el) return;
+    let start = el.selectionStart;
+    let end = el.selectionEnd;
+    if (start === end) {
+      // Cut current line if no selection
+      start = content.lastIndexOf('\n', start - 1) + 1;
+      const nextNl = content.indexOf('\n', end);
+      end = nextNl === -1 ? content.length : nextNl + 1;
+    }
+    const cutText = content.slice(start, end);
+    setEditorClipboard(cutText);
+    navigator.clipboard?.writeText(cutText).catch(() => {});
+    const updated = content.slice(0, start) + content.slice(end);
+    updateFileContent(activeFile.path, updated);
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(start, start);
+      setSelectionRange({ start, end: start, text: '' });
+    });
+    showEditorToast('Cut to clipboard');
+  };
+
+  const handlePasteClipboard = async () => {
+    if (!activeFile) return;
+    let pasteText = editorClipboard;
+    try {
+      const sysText = await navigator.clipboard.readText();
+      if (sysText) pasteText = sysText;
+    } catch {
+      // Use internal editorClipboard when browser iframe blocks clipboard read
+    }
+    if (!pasteText) {
+      showEditorToast('Clipboard is empty — Copy or Cut code first');
+      return;
+    }
+    insertAtCursor(pasteText);
+    showEditorToast(`Pasted (${pasteText.length} chars)`);
+  };
+
+  const handleToggleComment = () => {
+    if (!activeFile) return;
+    const currentLn = lines[activeLine - 1] ?? '';
+    const trimmed = currentLn.trim();
+    const updatedLines = [...lines];
+    if (trimmed.startsWith('//')) {
+      updatedLines[activeLine - 1] = currentLn.replace(/\/\/\s?/, '');
+    } else {
+      updatedLines[activeLine - 1] = `// ${currentLn}`;
+    }
+    updateFileContent(activeFile.path, updatedLines.join('\n'));
   };
 
   const handleKeyAction = (keyItem: (typeof MOBILE_QUICK_KEYS)[number]) => {
@@ -219,18 +367,32 @@ export const CodeEditor: React.FC = () => {
       return;
     }
     const el = textareaRef.current;
+    if (keyItem.action === 'select_word') {
+      handleSelectWord();
+      return;
+    }
+    if (keyItem.action === 'copy') {
+      handleCopySelection();
+      return;
+    }
+    if (keyItem.action === 'cut') {
+      handleCutSelection();
+      return;
+    }
+    if (keyItem.action === 'paste') {
+      handlePasteClipboard();
+      return;
+    }
     if (!el) return;
     const pos = el.selectionStart;
     if (keyItem.action === 'left') {
       el.focus();
       el.setSelectionRange(Math.max(0, pos - 1), Math.max(0, pos - 1));
-      handleCursorMove();
+      updateSelectionState();
     } else if (keyItem.action === 'right') {
       el.focus();
       el.setSelectionRange(Math.min(content.length, pos + 1), Math.min(content.length, pos + 1));
-      handleCursorMove();
-    } else if (keyItem.action === 'ctrl') {
-      setFindBarOpen((prev) => !prev);
+      updateSelectionState();
     }
   };
 
@@ -297,7 +459,7 @@ export const CodeEditor: React.FC = () => {
       .join('\n');
 
     updateFileContent(activeFile.path, formatted);
-    appendLogcat('D', 'CodeFormatter', `Formatted ${activeFile.name}`);
+    showEditorToast('Code formatted');
   };
 
   const handleGoToLine = (e: React.FormEvent) => {
@@ -318,12 +480,6 @@ export const CodeEditor: React.FC = () => {
     setGoToLineInput('');
   };
 
-  const handleCopyAll = () => {
-    navigator.clipboard?.writeText(content);
-    setCopiedNotice(true);
-    setTimeout(() => setCopiedNotice(false), 1800);
-  };
-
   const matchCount = useMemo(() => {
     if (!findQuery) return 0;
     return content.split(findQuery).length - 1;
@@ -335,7 +491,7 @@ export const CodeEditor: React.FC = () => {
         <FileCode className="w-10 h-10 text-slate-600 mb-3" />
         <h3 className="text-sm font-semibold text-slate-300">No Active File Selected</h3>
         <p className="text-xs text-slate-500 max-w-sm mt-1">
-          Select a source file (`MainActivity.kt`, `activity_main.xml`, or `build.gradle`) from the Project Explorer to begin editing.
+          Select a source file (`MainActivity.kt`, `main.dart`, `App.tsx`, or `activity_main.xml`) from the Project Explorer to begin editing.
         </p>
       </div>
     );
@@ -343,7 +499,7 @@ export const CodeEditor: React.FC = () => {
 
   return (
     <div className="flex-1 flex flex-col min-w-0 h-full bg-[#0D131F] overflow-hidden">
-      {/* File Tabs & Action Bar */}
+      {/* Row 1: File Tabs & Build System Language Switcher (Kotlin / Java / React / Flutter) */}
       <div className="h-10 border-b border-slate-800/80 bg-[#0B0F17] flex items-center justify-between px-2 gap-2 shrink-0">
         {/* Scrollable Open Tabs */}
         <div className="flex items-center gap-1 overflow-x-auto no-scrollbar min-w-0 flex-1">
@@ -390,16 +546,38 @@ export const CodeEditor: React.FC = () => {
             })}
         </div>
 
-        {/* Right Editor Controls & XML Code/Design/Split Switcher */}
-        <div className="flex items-center gap-1 shrink-0">
+        {/* Right Editor Controls: Build Target Selector (Kotlin / Java / React / Flutter) & Tools */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          {/* Build System & Language Selector directly inside Editor */}
+          <div className="hidden sm:flex items-center bg-slate-900 p-0.5 rounded-lg border border-slate-800">
+            {LANGUAGE_BUILD_OPTIONS.map((opt) => {
+              const isActiveLang = activeProject.language === opt.lang;
+              return (
+                <button
+                  key={opt.lang}
+                  type="button"
+                  onClick={() => setProjectBuildConfig(opt.lang, opt.build)}
+                  className={`px-2 py-1 rounded-md text-[11px] font-medium transition-colors whitespace-nowrap cursor-pointer ${
+                    isActiveLang
+                      ? 'bg-emerald-600 text-slate-950 font-semibold'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                  title={`Switch Build System to ${opt.build}`}
+                >
+                  {opt.lang}
+                </button>
+              );
+            })}
+          </div>
+
           {isXmlFile && (
-            <div className="flex items-center bg-slate-900 p-0.5 rounded-lg border border-slate-800 mr-1.5">
+            <div className="flex items-center bg-slate-900 p-0.5 rounded-lg border border-slate-800">
               {(['code', 'design', 'split'] as const).map((m) => (
                 <button
                   key={m}
                   type="button"
                   onClick={() => setXmlViewMode(activeFile.path, m)}
-                  className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium capitalize transition-colors whitespace-nowrap ${
+                  className={`flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium capitalize transition-colors whitespace-nowrap ${
                     xmlMode === m
                       ? 'bg-emerald-600 text-slate-950 font-semibold'
                       : 'text-slate-400 hover:text-slate-200'
@@ -458,19 +636,85 @@ export const CodeEditor: React.FC = () => {
           >
             <Sparkles className="w-3.5 h-3.5" />
           </button>
+        </div>
+      </div>
+
+      {/* Row 2: Dedicated Code Selection & Clipboard Bar (Select Word, Select Line, Select All, Copy, Cut, Paste, Comment) */}
+      <div className="h-9 px-3 bg-[#101726] border-b border-slate-800/80 flex items-center justify-between gap-2 overflow-x-auto no-scrollbar shrink-0 text-xs">
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px] font-mono text-slate-400 mr-1 flex items-center gap-1">
+            <MousePointerClick className="w-3.5 h-3.5 text-emerald-400" />
+            {selectionRange.text.length > 0
+              ? `Selected ${selectionRange.text.length} chars:`
+              : 'Selection Actions:'}
+          </span>
+
           <button
             type="button"
-            onClick={handleCopyAll}
-            className="p-1.5 rounded hover:bg-slate-800 text-slate-400 hover:text-slate-200"
-            title="Copy File Content"
+            onClick={handleSelectWord}
+            className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800 text-[11px] text-slate-200 whitespace-nowrap cursor-pointer"
           >
-            {copiedNotice ? (
-              <Check className="w-3.5 h-3.5 text-emerald-400" />
-            ) : (
-              <Copy className="w-3.5 h-3.5" />
-            )}
+            Select Word
+          </button>
+          <button
+            type="button"
+            onClick={handleSelectCurrentLine}
+            className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800 text-[11px] text-slate-200 whitespace-nowrap cursor-pointer"
+          >
+            Select Line
+          </button>
+          <button
+            type="button"
+            onClick={handleSelectAll}
+            className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800 text-[11px] text-slate-200 whitespace-nowrap cursor-pointer"
+          >
+            Select All
+          </button>
+
+          <div className="h-3.5 w-px bg-slate-800 mx-1" />
+
+          <button
+            type="button"
+            onClick={handleCopySelection}
+            className="px-2.5 py-1 rounded bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-[11px] text-emerald-300 font-medium flex items-center gap-1 whitespace-nowrap cursor-pointer"
+          >
+            <Copy className="w-3 h-3" />
+            <span>Copy</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleCutSelection}
+            className="px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800 text-[11px] text-slate-200 flex items-center gap-1 whitespace-nowrap cursor-pointer"
+          >
+            <Scissors className="w-3 h-3 text-amber-400" />
+            <span>Cut</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handlePasteClipboard}
+            className="px-2.5 py-1 rounded bg-sky-600/20 hover:bg-sky-600/30 border border-sky-500/40 text-[11px] text-sky-300 font-medium flex items-center gap-1 whitespace-nowrap cursor-pointer"
+          >
+            <ClipboardPaste className="w-3 h-3" />
+            <span>Paste</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleToggleComment}
+            className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800 font-mono text-[11px] text-slate-300 whitespace-nowrap cursor-pointer"
+          >
+            // Comment
           </button>
         </div>
+
+        {actionToast && (
+          <div className="flex items-center gap-1 text-[11px] font-medium text-emerald-400 shrink-0">
+            <Check className="w-3.5 h-3.5" />
+            <span>{actionToast}</span>
+          </div>
+        )}
       </div>
 
       {/* Inline Find & Replace Drawer */}
@@ -551,7 +795,6 @@ export const CodeEditor: React.FC = () => {
 
       {/* Main Editor Body: Code, Design, or Split */}
       <div className="flex-1 flex flex-col xl:flex-row min-h-0 overflow-hidden">
-        {/* Code Viewport */}
         {(!isXmlFile || xmlMode === 'code' || xmlMode === 'split') && (
           <div
             className={`flex-1 flex min-h-0 relative overflow-hidden ${
@@ -564,20 +807,14 @@ export const CodeEditor: React.FC = () => {
                 className="w-12 py-3 bg-[#0B0F17] border-r border-slate-800/70 select-none text-right pr-2.5 font-mono text-slate-500 shrink-0 overflow-hidden"
                 style={{ fontSize: `${settings.fontSize}px`, lineHeight: '22px' }}
               >
-                {lines.map((ln, idx) => {
+                {lines.map((_, idx) => {
                   const lineNo = idx + 1;
-                  const canFold = ln.trim().endsWith('{') || ln.trim().startsWith('<LinearLayout');
                   return (
                     <div
                       key={lineNo}
-                      onClick={() => {
-                        if (canFold) {
-                          setFoldedLines((prev) => ({ ...prev, [lineNo]: !prev[lineNo] }));
-                        }
-                      }}
                       className={`flex items-center justify-end gap-1 ${
                         activeLine === lineNo ? 'text-emerald-400 font-semibold' : ''
-                      } ${canFold ? 'cursor-pointer hover:text-slate-300' : ''}`}
+                      }`}
                       style={{ height: '22px' }}
                     >
                       <span>{lineNo}</span>
@@ -625,14 +862,15 @@ export const CodeEditor: React.FC = () => {
                 value={content}
                 onChange={(e) => updateFileContent(activeFile.path, e.target.value)}
                 onScroll={syncScroll}
-                onClick={handleCursorMove}
-                onKeyUp={handleCursorMove}
+                onSelect={updateSelectionState}
+                onClick={updateSelectionState}
+                onKeyUp={updateSelectionState}
                 onKeyDown={handleKeyDown}
                 spellCheck={false}
                 autoCapitalize="off"
                 autoComplete="off"
                 autoCorrect="off"
-                className={`absolute inset-0 w-full h-full py-3 px-4 font-mono bg-transparent text-transparent caret-emerald-400 resize-none focus:outline-none overflow-auto selection:bg-emerald-500/30 ${
+                className={`absolute inset-0 w-full h-full py-3 px-4 font-mono bg-transparent text-transparent caret-emerald-400 resize-none focus:outline-none overflow-auto selection:bg-emerald-500/35 ${
                   settings.wordWrap ? 'whitespace-pre-wrap break-words' : 'whitespace-pre'
                 }`}
                 style={{
@@ -657,7 +895,7 @@ export const CodeEditor: React.FC = () => {
         )}
       </div>
 
-      {/* Mobile Developer Quick Symbol Touch Bar (Section 7 of PRD: Tab Ctrl ← → { } ; =) */}
+      {/* Mobile Developer Quick Symbol & Selection Touch Bar */}
       <div className="h-10 bg-[#0B0F17] border-t border-slate-800/80 px-2 flex items-center justify-between gap-1 overflow-x-auto no-scrollbar shrink-0">
         <div className="flex items-center gap-1">
           {MOBILE_QUICK_KEYS.map((item) => (
@@ -665,7 +903,11 @@ export const CodeEditor: React.FC = () => {
               key={item.label}
               type="button"
               onClick={() => handleKeyAction(item)}
-              className="min-w-[36px] h-7 px-2 rounded bg-slate-900 hover:bg-slate-800 active:bg-emerald-600 active:text-slate-950 border border-slate-800 font-mono text-xs text-slate-200 flex items-center justify-center transition-colors shrink-0"
+              className={`min-w-[36px] h-7 px-2 rounded border font-mono text-xs flex items-center justify-center transition-colors shrink-0 cursor-pointer ${
+                item.action === 'copy' || item.action === 'paste' || item.action === 'select_word'
+                  ? 'bg-emerald-950/60 hover:bg-emerald-900/70 border-emerald-700/50 text-emerald-300 font-semibold'
+                  : 'bg-slate-900 hover:bg-slate-800 active:bg-emerald-600 active:text-slate-950 border-slate-800 text-slate-200'
+              }`}
             >
               {item.label}
             </button>
@@ -681,11 +923,11 @@ export const CodeEditor: React.FC = () => {
         </div>
 
         <div className="hidden md:flex items-center gap-3 text-[11px] font-mono text-slate-500 shrink-0 pl-2">
-          <span>Ln {activeLine}, Col 1</span>
+          <span>Ln {activeLine}</span>
           <span>·</span>
-          <span className="uppercase">{activeFile.language || 'TEXT'}</span>
+          <span>{activeProject.language}</span>
           <span>·</span>
-          <span>UTF-8</span>
+          <span>{activeProject.buildSystem}</span>
         </div>
       </div>
     </div>

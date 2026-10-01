@@ -1,9 +1,17 @@
-import { FileNode, Project, ProjectTemplateId, SupportedLanguage } from '../types/ide';
+import {
+  FileNode,
+  Project,
+  ProjectBuildSystem,
+  ProjectLanguage,
+  ProjectTemplateId,
+  SupportedLanguage,
+} from '../types/ide';
 
 export function detectLanguage(fileName: string): SupportedLanguage {
   const lower = fileName.toLowerCase();
   if (lower.endsWith('.kt') || lower.endsWith('.kts')) return 'kotlin';
   if (lower.endsWith('.java')) return 'java';
+  if (lower.endsWith('.dart')) return 'dart';
   if (lower.endsWith('.xml')) return 'xml';
   if (lower.endsWith('.gradle')) return 'gradle';
   if (lower.endsWith('.json')) return 'json';
@@ -19,61 +27,105 @@ export function detectLanguage(fileName: string): SupportedLanguage {
   return 'properties';
 }
 
+export const ANDROID_PERMISSIONS_LIST = [
+  { id: 'android.permission.INTERNET', label: 'Internet & Network Access', dangerous: false },
+  { id: 'android.permission.CAMERA', label: 'Camera Capture', dangerous: true },
+  { id: 'android.permission.READ_EXTERNAL_STORAGE', label: 'Read Storage / Media', dangerous: true },
+  { id: 'android.permission.WRITE_EXTERNAL_STORAGE', label: 'Write Storage / Files', dangerous: true },
+  { id: 'android.permission.ACCESS_FINE_LOCATION', label: 'Precise GPS Location', dangerous: true },
+  { id: 'android.permission.POST_NOTIFICATIONS', label: 'Push & Local Notifications', dangerous: true },
+  { id: 'android.permission.VIBRATE', label: 'Haptic Vibration', dangerous: false },
+];
+
 export const PROJECT_TEMPLATES: {
   id: ProjectTemplateId;
   name: string;
   description: string;
-  defaultLang: 'Kotlin' | 'Java' | 'React / TypeScript';
+  defaultLang: ProjectLanguage;
+  defaultBuildSystem: ProjectBuildSystem;
   category: string;
+  previewImage: string;
+  accentColor: string;
 }[] = [
   {
     id: 'empty_activity',
-    name: 'Empty Activity',
-    description: 'Creates a new Android project with a single AppCompatActivity and XML layout.',
+    name: 'Empty Views Activity',
+    description: 'AppCompatActivity with Constraint/LinearLayout XML and interactive action button.',
     defaultLang: 'Kotlin',
-    category: 'Android Native',
+    defaultBuildSystem: 'Kotlin Gradle DSL',
+    category: 'Android Kotlin',
+    previewImage: '/src/assets/images/template_kotlin_android_1790861883908.jpg',
+    accentColor: '#10B981',
   },
   {
-    id: 'basic_activity',
-    name: 'Basic Activity',
-    description: 'App bar, FloatingActionButton, and interactive counter card layout.',
-    defaultLang: 'Kotlin',
-    category: 'Android Native',
-  },
-  {
-    id: 'bottom_nav',
-    name: 'Bottom Navigation',
-    description: 'Standard three-tab bottom navigation architecture with Home, Dashboard, and Alerts.',
-    defaultLang: 'Kotlin',
-    category: 'Android Native',
-  },
-  {
-    id: 'login_screen',
-    name: 'Login Screen',
-    description: 'Email and password authentication form with input validation and state feedback.',
-    defaultLang: 'Kotlin',
-    category: 'Android Native',
-  },
-  {
-    id: 'recyclerview',
-    name: 'RecyclerView List',
-    description: 'Scrollable list adapter pattern for high-performance mobile feeds.',
-    defaultLang: 'Kotlin',
-    category: 'Android Native',
-  },
-  {
-    id: 'compose_activity',
-    name: 'Compose Activity',
-    description: 'Declarative UI built with Jetpack Compose Material 3 components.',
-    defaultLang: 'Kotlin',
-    category: 'Jetpack Compose',
+    id: 'flutter_app',
+    name: 'Flutter Material 3 App',
+    description: 'Cross-platform Flutter & Dart project with StatefulWidget counter, cards, and Gradle shell.',
+    defaultLang: 'Flutter',
+    defaultBuildSystem: 'Flutter + Gradle',
+    category: 'Flutter SDK',
+    previewImage: '/src/assets/images/template_flutter_app_1790861898421.jpg',
+    accentColor: '#38BDF8',
   },
   {
     id: 'react_webview',
-    name: 'React Capacitor Hybrid',
-    description: 'HTML, CSS, and TypeScript mobile project bundled inside an Android WebView shell.',
-    defaultLang: 'React / TypeScript',
-    category: 'Hybrid Web',
+    name: 'React + Capacitor Hybrid',
+    description: 'React 19 + TypeScript mobile interface wrapped in an Android WebView & Gradle bridge.',
+    defaultLang: 'React',
+    defaultBuildSystem: 'React Vite + Capacitor',
+    category: 'React Hybrid',
+    previewImage: '/src/assets/images/template_react_hybrid_1790861912919.jpg',
+    accentColor: '#818CF8',
+  },
+  {
+    id: 'login_screen',
+    name: 'Login & Auth Activity',
+    description: 'Java/Kotlin authentication screen with Email, Password, validation, and Toast feedback.',
+    defaultLang: 'Java',
+    defaultBuildSystem: 'Java Groovy Gradle',
+    category: 'Android Java',
+    previewImage: '/src/assets/images/template_login_java_1790861928440.jpg',
+    accentColor: '#F59E0B',
+  },
+  {
+    id: 'compose_activity',
+    name: 'Jetpack Compose Activity',
+    description: 'Declarative @Composable UI built with Material 3 theme and state management.',
+    defaultLang: 'Kotlin',
+    defaultBuildSystem: 'Kotlin Gradle DSL',
+    category: 'Jetpack Compose',
+    previewImage: '/src/assets/images/template_kotlin_android_1790861883908.jpg',
+    accentColor: '#10B981',
+  },
+  {
+    id: 'bottom_nav',
+    name: 'Bottom Navigation Views',
+    description: 'Multi-tab mobile navigation layout with Home, Dashboard, and Notifications.',
+    defaultLang: 'Kotlin',
+    defaultBuildSystem: 'Kotlin Gradle DSL',
+    category: 'Android Kotlin',
+    previewImage: '/src/assets/images/template_flutter_app_1790861898421.jpg',
+    accentColor: '#34D399',
+  },
+  {
+    id: 'basic_activity',
+    name: 'Basic Activity + FAB',
+    description: 'Material App Bar, FloatingActionButton, and coordinator content layout.',
+    defaultLang: 'Kotlin',
+    defaultBuildSystem: 'Kotlin Gradle DSL',
+    category: 'Android Kotlin',
+    previewImage: '/src/assets/images/template_kotlin_android_1790861883908.jpg',
+    accentColor: '#10B981',
+  },
+  {
+    id: 'recyclerview',
+    name: 'RecyclerView Feed List',
+    description: 'High-performance scrollable list adapter and ViewHolder item pattern.',
+    defaultLang: 'Java',
+    defaultBuildSystem: 'Java Groovy Gradle',
+    category: 'Android Java',
+    previewImage: '/src/assets/images/template_react_hybrid_1790861912919.jpg',
+    accentColor: '#38BDF8',
   },
 ];
 
@@ -102,9 +154,10 @@ function createFolderStructure(paths: string[], now: number): FileNode[] {
 export function generateProjectFiles(params: {
   name: string;
   packageName: string;
-  language: 'Kotlin' | 'Java' | 'React / TypeScript';
+  language: ProjectLanguage;
   template: ProjectTemplateId;
   minSdk: string;
+  permissions?: string[];
 }): FileNode[] {
   const now = Date.now();
   const pkgPath = params.packageName.replace(/\./g, '/');
@@ -116,7 +169,232 @@ export function generateProjectFiles(params: {
     ? '31'
     : '26';
 
-  if (params.template === 'react_webview' || params.language === 'React / TypeScript') {
+  const perms = params.permissions || [
+    'android.permission.INTERNET',
+    'android.permission.VIBRATE',
+  ];
+  const manifestPermsXml = perms
+    .map((p) => `    <uses-permission android:name="${p}" />`)
+    .join('\n');
+
+  // 1. FLUTTER PROJECT GENERATOR
+  if (params.language === 'Flutter' || params.template === 'flutter_app') {
+    const rawFiles: { path: string; content: string }[] = [
+      {
+        path: 'lib/main.dart',
+        content: `import 'package:flutter/material.dart';
+
+void main() {
+  runApp(const ${params.name.replace(/[^a-zA-Z0-9]/g, '') || 'MyFlutter'}App());
+}
+
+class ${params.name.replace(/[^a-zA-Z0-9]/g, '') || 'MyFlutter'}App extends StatelessWidget {
+  const ${params.name.replace(/[^a-zA-Z0-9]/g, '') || 'MyFlutter'}App({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: '${params.name}',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData.dark(useMaterial3: true).copyWith(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF10B981),
+          brightness: Brightness.dark,
+        ),
+      ),
+      home: const HomePage(title: '${params.name}'),
+    );
+  }
+}
+
+class HomePage extends StatefulWidget {
+  final String title;
+  const HomePage({super.key, required this.title});
+
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  int _counter = 0;
+  final List<String> _items = ['Hot Reload Ready', 'Material 3 Theme', 'ARM64 Skia / Impeller'];
+
+  void _incrementCounter() {
+    setState(() {
+      _counter++;
+    });
+    debugPrint('Flutter Action triggered: counter=\$_counter');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.title),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Flutter Counter: \$_counter',
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            const SizedBox(height: 12),
+            ElevatedButton(
+              onPressed: _incrementCounter,
+              child: const Text('Increment Flutter State'),
+            ),
+          ],
+        ),
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _incrementCounter,
+        tooltip: 'Increment',
+        child: const Icon(Icons.add),
+      ),
+    );
+  }
+}
+`,
+      },
+      {
+        path: 'pubspec.yaml',
+        content: `name: ${params.name.toLowerCase().replace(/[^a-z0-9_]/g, '_')}
+description: A new Flutter Android project created in CodeStudio Mobile.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.4.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+`,
+      },
+      {
+        path: 'android/app/build.gradle',
+        content: `plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    id "dev.flutter.flutter-gradle-plugin"
+}
+
+android {
+    namespace "${params.packageName}"
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "${params.packageName}"
+        minSdk ${minSdkNum}
+        targetSdk 34
+        versionCode 1
+        versionName "1.0.0"
+    }
+}
+`,
+      },
+      {
+        path: 'android/app/src/main/AndroidManifest.xml',
+        content: `<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="${params.packageName}">
+
+${manifestPermsXml}
+
+    <application
+        android:label="${params.name}"
+        android:name="\${applicationName}"
+        android:icon="@mipmap/ic_launcher">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:theme="@style/LaunchTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
+`,
+      },
+      {
+        path: 'app/src/main/res/layout/activity_main.xml',
+        content: `<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="20dp"
+    android:background="#0F172A">
+
+    <TextView
+        android:id="@+id/tvFlutterTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="${params.name} (Flutter Engine)"
+        android:textSize="22sp"
+        android:textColor="#38BDF8" />
+
+    <TextView
+        android:id="@+id/tvFlutterSub"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Dart 3.4 · Impeller Renderer · Material 3"
+        android:textSize="13sp"
+        android:textColor="#94A3B8" />
+
+    <EditText
+        android:id="@+id/etFlutterInput"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="Add item to Flutter state..."
+        android:textColor="#F8FAFC" />
+
+    <Button
+        android:id="@+id/btnFlutterAction"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Increment Flutter State (+1)"
+        android:background="#38BDF8" />
+
+</LinearLayout>
+`,
+      },
+    ];
+
+    const folders = createFolderStructure(rawFiles.map((f) => f.path), now);
+    const fileNodes: FileNode[] = rawFiles.map((f) => {
+      const segs = f.path.split('/');
+      const fileName = segs[segs.length - 1];
+      return {
+        id: `file-${f.path}`,
+        name: fileName,
+        path: f.path,
+        type: 'file',
+        content: f.content,
+        language: detectLanguage(fileName),
+        lastModified: now,
+      };
+    });
+    return [...folders, ...fileNodes];
+  }
+
+  // 2. REACT + CAPACITOR HYBRID PROJECT GENERATOR
+  if (params.language === 'React' || params.template === 'react_webview') {
     const rawFiles: { path: string; content: string }[] = [
       {
         path: 'src/App.tsx',
@@ -133,7 +411,7 @@ export default function App() {
   const [notes, setNotes] = useState<NoteItem[]>([
     { id: '1', title: 'Configure Gradle offline cache', category: 'Android', updatedAt: '10m ago' },
     { id: '2', title: 'Test APK signing with debug keystore', category: 'Build', updatedAt: '1h ago' },
-    { id: '3', title: 'Optimize RecyclerView item view bindings', category: 'UI', updatedAt: 'Yesterday' }
+    { id: '3', title: 'Optimize Capacitor bridge plugins', category: 'React', updatedAt: 'Yesterday' }
   ]);
   const [draft, setDraft] = useState('');
 
@@ -148,7 +426,7 @@ export default function App() {
 
   return (
     <div className="p-4 bg-slate-950 text-slate-100 min-h-screen">
-      <h1 className="text-xl font-bold mb-4">${params.name}</h1>
+      <h1 className="text-xl font-bold mb-4">${params.name} (React Hybrid)</h1>
       <div className="flex gap-2 mb-4">
         <input
           value={draft}
@@ -157,7 +435,7 @@ export default function App() {
           className="flex-1 px-3 py-2 rounded bg-slate-900 border border-slate-800"
         />
         <button onClick={addNote} className="px-4 py-2 rounded bg-emerald-600 text-white font-medium">
-          Add
+          Add Note
         </button>
       </div>
       <ul className="space-y-2">
@@ -215,7 +493,7 @@ export default function App() {
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="${params.packageName}">
 
-    <uses-permission android:name="android.permission.INTERNET" />
+${manifestPermsXml}
 
     <application
         android:allowBackup="true"
@@ -248,7 +526,7 @@ export default function App() {
         android:id="@+id/tvHeader"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="${params.name} Hybrid Shell"
+        android:text="${params.name} (React + Capacitor)"
         android:textSize="22sp"
         android:textColor="#F8FAFC" />
 
@@ -263,7 +541,7 @@ export default function App() {
         android:id="@+id/btnSaveNote"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Save Note to Local Storage"
+        android:text="Save Note to React State"
         android:background="#10B981" />
 
 </LinearLayout>
@@ -286,10 +564,7 @@ export default function App() {
       },
     ];
 
-    const folders = createFolderStructure(
-      rawFiles.map((f) => f.path),
-      now
-    );
+    const folders = createFolderStructure(rawFiles.map((f) => f.path), now);
     const fileNodes: FileNode[] = rawFiles.map((f) => {
       const segments = f.path.split('/');
       const fileName = segments[segments.length - 1];
@@ -306,6 +581,7 @@ export default function App() {
     return [...folders, ...fileNodes];
   }
 
+  // 3. KOTLIN & JAVA NATIVE ANDROID GENERATOR
   const isJava = params.language === 'Java';
   const mainSourcePath = isJava
     ? `app/src/main/java/${pkgPath}/MainActivity.java`
@@ -594,9 +870,7 @@ class MainActivity : AppCompatActivity() {
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="${params.packageName}">
 
-    <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <uses-permission android:name="android.permission.VIBRATE" />
+${manifestPermsXml}
 
     <application
         android:allowBackup="true"
@@ -695,10 +969,7 @@ android.nonTransitiveRClass=true
     },
   ];
 
-  const folders = createFolderStructure(
-    rawFiles.map((f) => f.path),
-    now
-  );
+  const folders = createFolderStructure(rawFiles.map((f) => f.path), now);
   const fileNodes: FileNode[] = rawFiles.map((f) => {
     const segments = f.path.split('/');
     const fileName = segments[segments.length - 1];
@@ -725,33 +996,51 @@ export function createInitialProjects(): Project[] {
     language: 'Kotlin',
     template: 'empty_activity',
     minSdk: 'Android 8.0 (API 26)',
+    permissions: [
+      'android.permission.INTERNET',
+      'android.permission.VIBRATE',
+      'android.permission.POST_NOTIFICATIONS',
+    ],
   });
 
-  // Modify MainActivity.kt slightly in MyApp so Git Source Control immediately shows realistic working changes if desired, or keep snapshot synced
   const myAppSnapshot: Record<string, string> = {};
   myAppFiles.forEach((f) => {
     if (f.type === 'file' && f.content !== undefined) {
       myAppSnapshot[f.path] = f.content;
     }
   });
-  // Introduce a subtle unstaged edit on MainActivity.kt and activity_main.xml so Git Source Control has live changes out of the box (matching Section 16 of PRD!)
   myAppSnapshot['app/src/main/java/com/example/myapp/MainActivity.kt'] =
     (myAppSnapshot['app/src/main/java/com/example/myapp/MainActivity.kt'] || '').replace(
       'private var tapCount = 0',
       'private var tapCount = 0 // Initial commit baseline'
     );
-  myAppSnapshot['app/src/main/res/layout/activity_main.xml'] =
-    (myAppSnapshot['app/src/main/res/layout/activity_main.xml'] || '').replace(
-      'Trigger Action & Logcat',
-      'Run Action'
-    );
+
+  const flutterFiles = generateProjectFiles({
+    name: 'FlutterShop',
+    packageName: 'com.codestudio.fluttershop',
+    language: 'Flutter',
+    template: 'flutter_app',
+    minSdk: 'Android 8.0 (API 26)',
+    permissions: ['android.permission.INTERNET', 'android.permission.VIBRATE'],
+  });
+  const flutterSnapshot: Record<string, string> = {};
+  flutterFiles.forEach((f) => {
+    if (f.type === 'file' && f.content !== undefined) {
+      flutterSnapshot[f.path] = f.content;
+    }
+  });
 
   const notesFiles = generateProjectFiles({
     name: 'NotesApp',
     packageName: 'com.codestudio.notesapp',
-    language: 'React / TypeScript',
+    language: 'React',
     template: 'react_webview',
     minSdk: 'Android 10.0 (API 29)',
+    permissions: [
+      'android.permission.INTERNET',
+      'android.permission.READ_EXTERNAL_STORAGE',
+      'android.permission.WRITE_EXTERNAL_STORAGE',
+    ],
   });
   const notesSnapshot: Record<string, string> = {};
   notesFiles.forEach((f) => {
@@ -766,6 +1055,7 @@ export function createInitialProjects(): Project[] {
     language: 'Java',
     template: 'login_screen',
     minSdk: 'Android 8.0 (API 26)',
+    permissions: ['android.permission.INTERNET', 'android.permission.VIBRATE'],
   });
   const calcSnapshot: Record<string, string> = {};
   calcFiles.forEach((f) => {
@@ -782,10 +1072,15 @@ export function createInitialProjects(): Project[] {
       language: 'Kotlin',
       template: 'empty_activity',
       minSdk: 'Android 8.0 (API 26)',
-      buildSystem: 'Gradle (Kotlin DSL)',
+      buildSystem: 'Kotlin Gradle DSL',
+      permissions: [
+        'android.permission.INTERNET',
+        'android.permission.VIBRATE',
+        'android.permission.POST_NOTIFICATIONS',
+      ],
       storagePath: '/storage/emulated/0/CodeStudio/Projects/MyApp',
       createdAt: now - 1000 * 60 * 120,
-      updatedAt: now - 1000 * 60 * 2, // 2 min ago
+      updatedAt: now - 1000 * 60 * 2,
       files: myAppFiles,
       git: {
         branch: 'main',
@@ -815,16 +1110,52 @@ export function createInitialProjects(): Project[] {
       },
     },
     {
+      id: 'proj-fluttershop',
+      name: 'FlutterShop',
+      packageName: 'com.codestudio.fluttershop',
+      language: 'Flutter',
+      template: 'flutter_app',
+      minSdk: 'Android 8.0 (API 26)',
+      buildSystem: 'Flutter + Gradle',
+      permissions: ['android.permission.INTERNET', 'android.permission.VIBRATE'],
+      storagePath: '/storage/emulated/0/CodeStudio/Projects/FlutterShop',
+      createdAt: now - 1000 * 60 * 60 * 5,
+      updatedAt: now - 1000 * 60 * 18,
+      files: flutterFiles,
+      git: {
+        branch: 'main',
+        branches: ['main', 'flutter-impeller'],
+        remoteUrl: 'https://github.com/developer/FlutterShop-Mobile.git',
+        commits: [
+          {
+            id: 'c-flut-1',
+            hash: '5c92e1a',
+            message: 'Create Flutter Material 3 StatefulWidget counter and pubspec.yaml',
+            author: 'Mobile Dev',
+            timestamp: now - 1000 * 60 * 60 * 5,
+            branch: 'main',
+            changedFiles: ['lib/main.dart', 'pubspec.yaml'],
+          },
+        ],
+        initialSnapshot: flutterSnapshot,
+      },
+    },
+    {
       id: 'proj-notesapp',
       name: 'NotesApp',
       packageName: 'com.codestudio.notesapp',
-      language: 'React / TypeScript',
+      language: 'React',
       template: 'react_webview',
       minSdk: 'Android 10.0 (API 29)',
-      buildSystem: 'Vite + Capacitor',
+      buildSystem: 'React Vite + Capacitor',
+      permissions: [
+        'android.permission.INTERNET',
+        'android.permission.READ_EXTERNAL_STORAGE',
+        'android.permission.WRITE_EXTERNAL_STORAGE',
+      ],
       storagePath: '/storage/emulated/0/CodeStudio/Projects/NotesApp',
       createdAt: now - 1000 * 60 * 60 * 28,
-      updatedAt: now - 1000 * 60 * 60 * 22, // Yesterday
+      updatedAt: now - 1000 * 60 * 60 * 22,
       files: notesFiles,
       git: {
         branch: 'main',
@@ -851,10 +1182,11 @@ export function createInitialProjects(): Project[] {
       language: 'Java',
       template: 'login_screen',
       minSdk: 'Android 8.0 (API 26)',
-      buildSystem: 'Gradle (Groovy)',
+      buildSystem: 'Java Groovy Gradle',
+      permissions: ['android.permission.INTERNET', 'android.permission.VIBRATE'],
       storagePath: '/storage/emulated/0/CodeStudio/Projects/Calculator',
       createdAt: now - 1000 * 60 * 60 * 72,
-      updatedAt: now - 1000 * 60 * 60 * 48, // 2 days ago
+      updatedAt: now - 1000 * 60 * 60 * 48,
       files: calcFiles,
       git: {
         branch: 'main',

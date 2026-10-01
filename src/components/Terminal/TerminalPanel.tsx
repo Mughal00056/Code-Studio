@@ -4,12 +4,13 @@ import { useIdeStore } from '../../stores/ideStore';
 
 const QUICK_COMMANDS = [
   './gradlew assembleDebug',
-  './gradlew clean',
+  'flutter build apk',
+  'flutter doctor',
+  'npm run build',
+  'sdkmanager --list',
+  'adb install',
   'ls',
-  'pwd',
   'git status',
-  'git log',
-  'adb devices',
   'help',
 ];
 
@@ -25,6 +26,8 @@ export const TerminalPanel: React.FC = () => {
   const [inputCmd, setInputCmd] = useState('');
   const [cmdHistory, setCmdHistory] = useState<string[]>([
     './gradlew assembleDebug',
+    'flutter build apk',
+    'sdkmanager --list',
     'git status',
     'ls',
   ]);
@@ -76,9 +79,11 @@ export const TerminalPanel: React.FC = () => {
               key={cmd}
               type="button"
               onClick={() => executeTerminalCommand(cmd)}
-              className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800 text-[11px] text-slate-300 hover:text-emerald-300 transition-colors whitespace-nowrap shrink-0 flex items-center gap-1"
+              className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800 text-[11px] text-slate-300 hover:text-emerald-300 transition-colors whitespace-nowrap shrink-0 flex items-center gap-1 cursor-pointer"
             >
-              {cmd.startsWith('./gradlew') && <Play className="w-2.5 h-2.5 text-emerald-400" />}
+              {(cmd.startsWith('./gradlew') || cmd.startsWith('flutter build') || cmd.startsWith('npm')) && (
+                <Play className="w-2.5 h-2.5 text-emerald-400" />
+              )}
               <span>{cmd}</span>
             </button>
           ))}
@@ -133,7 +138,7 @@ export const TerminalPanel: React.FC = () => {
           value={inputCmd}
           onChange={(e) => setInputCmd(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Type command (e.g. ./gradlew assembleDebug, ls, git status)..."
+          placeholder="Type command (./gradlew assembleDebug, flutter build apk, sdkmanager --list)..."
           autoCapitalize="off"
           autoComplete="off"
           spellCheck={false}
@@ -141,7 +146,7 @@ export const TerminalPanel: React.FC = () => {
         />
         <button
           type="submit"
-          className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-sans font-semibold text-xs flex items-center gap-1 shrink-0"
+          className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-sans font-semibold text-xs flex items-center gap-1 shrink-0 cursor-pointer"
         >
           <span>Run</span>
           <CornerDownLeft className="w-3 h-3" />

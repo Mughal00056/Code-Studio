@@ -1,6 +1,7 @@
 export type SupportedLanguage =
   | 'kotlin'
   | 'java'
+  | 'dart'
   | 'xml'
   | 'json'
   | 'gradle'
@@ -15,6 +16,14 @@ export type SupportedLanguage =
   | 'bash'
   | 'properties';
 
+export type ProjectLanguage = 'Kotlin' | 'Java' | 'React' | 'Flutter';
+
+export type ProjectBuildSystem =
+  | 'Kotlin Gradle DSL'
+  | 'Java Groovy Gradle'
+  | 'React Vite + Capacitor'
+  | 'Flutter + Gradle';
+
 export type ProjectTemplateId =
   | 'empty_activity'
   | 'basic_activity'
@@ -22,12 +31,13 @@ export type ProjectTemplateId =
   | 'login_screen'
   | 'recyclerview'
   | 'compose_activity'
-  | 'react_webview';
+  | 'react_webview'
+  | 'flutter_app';
 
 export interface FileNode {
   id: string;
   name: string;
-  path: string; // relative to project root, e.g. "app/src/main/java/com/example/myapp/MainActivity.kt"
+  path: string; // relative to project root
   type: 'file' | 'folder';
   content?: string;
   language?: SupportedLanguage;
@@ -50,6 +60,8 @@ export interface ApkArtifact {
   projectId: string;
   projectName: string;
   packageName: string;
+  language: ProjectLanguage;
+  buildSystem: ProjectBuildSystem;
   variant: 'debug' | 'release';
   format: 'apk' | 'aab';
   versionName: string;
@@ -60,6 +72,7 @@ export interface ApkArtifact {
   createdAt: number;
   outputPath: string;
   permissions: string[];
+  grantedPermissions: string[];
   activities: string[];
   services: string[];
   installedOnDeviceIds: string[];
@@ -69,10 +82,11 @@ export interface Project {
   id: string;
   name: string;
   packageName: string;
-  language: 'Kotlin' | 'Java' | 'React / TypeScript';
+  language: ProjectLanguage;
   template: ProjectTemplateId;
   minSdk: string;
-  buildSystem: 'Gradle (Kotlin DSL)' | 'Gradle (Groovy)' | 'Vite + Capacitor';
+  buildSystem: ProjectBuildSystem;
+  permissions: string[];
   storagePath: string; // e.g. /storage/emulated/0/CodeStudio/Projects/MyApp
   createdAt: number;
   updatedAt: number;
@@ -82,7 +96,7 @@ export interface Project {
     branches: string[];
     remoteUrl: string;
     commits: GitCommit[];
-    initialSnapshot: Record<string, string>; // path -> content at last commit
+    initialSnapshot: Record<string, string>;
   };
 }
 
@@ -117,6 +131,19 @@ export interface ConnectedDevice {
   batteryLevel: number;
   abi: string;
   installedPackages: string[];
+}
+
+export interface ToolchainPackage {
+  id: string;
+  name: string;
+  category: 'Kotlin' | 'Java' | 'Gradle' | 'React' | 'Flutter' | 'Android SDK';
+  version: string;
+  sizeMb: number;
+  installed: boolean;
+  installing: boolean;
+  progress: number;
+  description: string;
+  binaryPath: string;
 }
 
 export type IdeTheme = 'dark' | 'light' | 'amoled' | 'dracula' | 'monokai' | 'solarized';

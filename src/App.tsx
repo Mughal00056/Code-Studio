@@ -9,11 +9,11 @@ import {
   ChevronUp,
   Code2,
   Command,
+  Cpu,
   FolderGit2,
   FolderTree,
   Hammer,
   Home,
-  Info,
   Play,
   Search,
   Settings,
@@ -54,7 +54,7 @@ export default function App() {
     setExplorerOpenMobile,
     setSearchModalOpen,
     setCommandPaletteOpen,
-    setAboutModalOpen,
+    setSdkManagerModalOpen,
     triggerBuild,
     isBuilding,
     buildLogs,
@@ -68,12 +68,10 @@ export default function App() {
     [projects, activeProjectId]
   );
 
-  // Sync theme attribute on document root
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', settings.theme);
   }, [settings.theme]);
 
-  // Global IDE Keyboard Shortcuts (Ctrl+K Command Palette, Ctrl+Shift+F Global Search)
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
@@ -90,7 +88,7 @@ export default function App() {
 
   return (
     <div className="h-screen w-screen flex flex-col bg-[#0B0F17] text-slate-100 overflow-hidden select-none">
-      {/* Top Bar Contract: 3-Zone Header (Brand Wordmark — 6 Clean Nav Links — 2 Primary Actions) */}
+      {/* Top Bar Contract: 3-Zone Header */}
       <header className="h-13 px-4 bg-[#0B0F17] border-b border-slate-800/80 flex items-center justify-between gap-4 shrink-0 z-30">
         {/* Zone 1: Single Text Element Brand Wordmark */}
         <a
@@ -143,8 +141,18 @@ export default function App() {
 
           <button
             type="button"
+            onClick={() => setSdkManagerModalOpen(true)}
+            className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs font-medium text-slate-300 hover:text-slate-100 transition-colors whitespace-nowrap cursor-pointer"
+            title="Android Studio SDK & Toolchain Installer"
+          >
+            <Cpu className="w-3.5 h-3.5 text-emerald-400" />
+            <span>SDK Manager</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setSearchModalOpen(true)}
-            className="p-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-slate-100 transition-colors"
+            className="p-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-slate-100 transition-colors cursor-pointer"
             title="Search Everywhere (Ctrl+Shift+F)"
           >
             <Search className="w-4 h-4" />
@@ -153,7 +161,7 @@ export default function App() {
           <button
             type="button"
             onClick={() => setCommandPaletteOpen(true)}
-            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs font-medium text-slate-300 hover:text-slate-100 transition-colors whitespace-nowrap"
+            className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs font-medium text-slate-300 hover:text-slate-100 transition-colors whitespace-nowrap cursor-pointer"
             title="Open Command Palette (Ctrl+K)"
           >
             <Command className="w-3.5 h-3.5 text-emerald-400" />
@@ -163,26 +171,15 @@ export default function App() {
           <button
             type="button"
             onClick={() => {
-              triggerBuild('apk');
+              triggerBuild('apk', true);
               if (activeScreen === 'workspace') {
                 setBottomPanelTab('build_output');
-              } else {
-                setActiveScreen('build');
               }
             }}
             className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-semibold text-xs flex items-center gap-1.5 transition-colors whitespace-nowrap cursor-pointer"
           >
             <Play className="w-3.5 h-3.5 fill-current" />
-            <span>{isBuilding ? 'Building...' : 'Build & Run'}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setAboutModalOpen(true)}
-            className="p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-900 transition-colors"
-            title="About CodeStudio Mobile"
-          >
-            <Info className="w-4 h-4" />
+            <span>{isBuilding ? 'Building...' : 'Build & Install'}</span>
           </button>
         </div>
       </header>
@@ -195,12 +192,10 @@ export default function App() {
           <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
             {/* Upper Workspace Split: Explorer + Editor */}
             <div className="flex-1 flex min-h-0 overflow-hidden relative">
-              {/* Desktop Explorer Sidebar */}
               <div className="hidden md:flex h-full">
                 <ProjectExplorer />
               </div>
 
-              {/* Mobile Drawer Explorer */}
               {explorerOpenMobile && (
                 <div className="fixed inset-0 z-40 md:hidden flex">
                   <div className="h-full z-10">
@@ -213,7 +208,6 @@ export default function App() {
                 </div>
               )}
 
-              {/* Center Code & XML Layout Editor */}
               <CodeEditor />
             </div>
 
@@ -223,13 +217,12 @@ export default function App() {
                 bottomPanelOpen ? 'h-56 sm:h-64' : 'h-9'
               }`}
             >
-              {/* Console Tab Header */}
               <div className="h-9 px-3 bg-[#0E1420] border-b border-slate-800/80 flex items-center justify-between gap-2 shrink-0">
                 <div className="flex items-center gap-1">
                   <button
                     type="button"
                     onClick={() => setBottomPanelTab('terminal')}
-                    className={`px-3 py-1 rounded text-xs font-medium flex items-center gap-1.5 transition-colors whitespace-nowrap ${
+                    className={`px-3 py-1 rounded text-xs font-medium flex items-center gap-1.5 transition-colors whitespace-nowrap cursor-pointer ${
                       bottomPanelOpen && bottomPanelTab === 'terminal'
                         ? 'bg-slate-800 text-emerald-300'
                         : 'text-slate-400 hover:text-slate-200'
@@ -242,7 +235,7 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => setBottomPanelTab('logcat')}
-                    className={`px-3 py-1 rounded text-xs font-medium flex items-center gap-1.5 transition-colors whitespace-nowrap ${
+                    className={`px-3 py-1 rounded text-xs font-medium flex items-center gap-1.5 transition-colors whitespace-nowrap cursor-pointer ${
                       bottomPanelOpen && bottomPanelTab === 'logcat'
                         ? 'bg-slate-800 text-emerald-300'
                         : 'text-slate-400 hover:text-slate-200'
@@ -255,7 +248,7 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => setBottomPanelTab('build_output')}
-                    className={`px-3 py-1 rounded text-xs font-medium flex items-center gap-1.5 transition-colors whitespace-nowrap ${
+                    className={`px-3 py-1 rounded text-xs font-medium flex items-center gap-1.5 transition-colors whitespace-nowrap cursor-pointer ${
                       bottomPanelOpen && bottomPanelTab === 'build_output'
                         ? 'bg-slate-800 text-emerald-300'
                         : 'text-slate-400 hover:text-slate-200'
@@ -267,8 +260,8 @@ export default function App() {
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <span className="hidden sm:inline text-[11px] font-mono text-slate-500">
-                    {activeProject.name} · {activeProject.packageName}
+                  <span className="hidden sm:inline text-[11px] font-mono text-slate-400">
+                    {activeProject.name} · {activeProject.language} · {activeProject.buildSystem}
                   </span>
                   <button
                     type="button"
@@ -285,7 +278,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Console Body */}
               {bottomPanelOpen && (
                 <div className="flex-1 min-h-0 overflow-hidden">
                   {bottomPanelTab === 'terminal' && <TerminalPanel />}
@@ -318,7 +310,7 @@ export default function App() {
         {activeScreen === 'settings' && <SettingsView />}
       </main>
 
-      {/* Mobile Bottom Navigation Bar (Visible on Smartphone Viewports) */}
+      {/* Mobile Bottom Navigation Bar */}
       <nav className="md:hidden h-14 bg-[#0B0F17] border-t border-slate-800/90 grid grid-cols-6 items-center shrink-0 z-30">
         {[
           { id: 'home' as const, label: 'Home', icon: Home },
@@ -346,7 +338,7 @@ export default function App() {
         })}
       </nav>
 
-      {/* Global Modals (New Project, Search Everywhere, Command Palette, Git Clone, About) */}
+      {/* Global Modals (Visual Photo Templates, SDK Installer, APK Package Installer, Global Search, Command Palette) */}
       <IdeModals />
     </div>
   );
