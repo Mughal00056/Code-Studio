@@ -570,27 +570,25 @@ export const CodeEditor: React.FC = () => {
             })}
           </div>
 
-          {isXmlFile && (
-            <div className="flex items-center bg-slate-900 p-0.5 rounded-lg border border-slate-800">
-              {(['code', 'design', 'split'] as const).map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => setXmlViewMode(activeFile.path, m)}
-                  className={`flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium capitalize transition-colors whitespace-nowrap ${
-                    xmlMode === m
-                      ? 'bg-emerald-600 text-slate-950 font-semibold'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  {m === 'code' && <Code2 className="w-3 h-3" />}
-                  {m === 'design' && <Smartphone className="w-3 h-3" />}
-                  {m === 'split' && <Columns className="w-3 h-3" />}
-                  <span>{m}</span>
-                </button>
-              ))}
-            </div>
-          )}
+          <div className="flex items-center bg-slate-900 p-0.5 rounded-lg border border-slate-800">
+            {(['code', 'design', 'split'] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setXmlViewMode(activeFile.path, m)}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium capitalize transition-colors whitespace-nowrap cursor-pointer ${
+                  xmlMode === m
+                    ? 'bg-emerald-600 text-slate-950 font-semibold'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                {m === 'code' && <Code2 className="w-3 h-3" />}
+                {m === 'design' && <Smartphone className="w-3 h-3" />}
+                {m === 'split' && <Columns className="w-3 h-3" />}
+                <span>{m === 'design' ? 'Preview' : m}</span>
+              </button>
+            ))}
+          </div>
 
           <button
             type="button"
@@ -793,12 +791,12 @@ export const CodeEditor: React.FC = () => {
         </form>
       )}
 
-      {/* Main Editor Body: Code, Design, or Split */}
+      {/* Main Editor Body: Code, Full Preview, or Split */}
       <div className="flex-1 flex flex-col xl:flex-row min-h-0 overflow-hidden">
-        {(!isXmlFile || xmlMode === 'code' || xmlMode === 'split') && (
+        {(xmlMode === 'code' || xmlMode === 'split') && (
           <div
             className={`flex-1 flex min-h-0 relative overflow-hidden ${
-              isXmlFile && xmlMode === 'split' ? 'border-b xl:border-b-0 xl:border-r border-slate-800' : ''
+              xmlMode === 'split' ? 'border-b xl:border-b-0 xl:border-r border-slate-800' : ''
             }`}
           >
             {/* Line Numbers Gutter */}
@@ -883,13 +881,19 @@ export const CodeEditor: React.FC = () => {
           </div>
         )}
 
-        {/* XML Design Viewport */}
-        {isXmlFile && (xmlMode === 'design' || xmlMode === 'split') && (
+        {/* Large Interactive App / Website Preview Viewport */}
+        {(xmlMode === 'design' || xmlMode === 'split') && (
           <div className="flex-1 min-h-0 overflow-hidden">
             <XmlLayoutDesigner
               filePath={activeFile.path}
               xmlContent={content}
-              onChangeXml={(updated) => updateFileContent(activeFile.path, updated)}
+              onChangeXml={(updated) => {
+                const targetXmlPath = isXmlFile
+                  ? activeFile.path
+                  : activeProject.files.find((f) => f.name === 'activity_main.xml')?.path ||
+                    activeFile.path;
+                updateFileContent(targetXmlPath, updated);
+              }}
             />
           </div>
         )}

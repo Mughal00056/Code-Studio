@@ -10,6 +10,7 @@ import {
   Code2,
   Command,
   Cpu,
+  Download,
   FolderGit2,
   FolderTree,
   Hammer,
@@ -31,6 +32,10 @@ import { GitSourceControlView } from './pages/GitSourceControlView';
 import { DeviceManagerView } from './pages/DeviceManagerView';
 import { SettingsView } from './pages/SettingsView';
 import { IdeModals } from './components/Modals/IdeModals';
+import {
+  downloadFullProjectZip,
+  getProjectEstimatedSizeMb,
+} from './services/projectExporter';
 import { ActiveScreen } from './types/ide';
 
 const NAV_ITEMS: { id: ActiveScreen; label: string }[] = [
@@ -166,6 +171,18 @@ export default function App() {
           >
             <Command className="w-3.5 h-3.5 text-emerald-400" />
             <span>Commands</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => downloadFullProjectZip(activeProject)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-xs font-semibold text-emerald-300 hover:text-emerald-200 transition-colors whitespace-nowrap cursor-pointer"
+            title={`Download ${activeProject.name}-Full-Project.zip (${getProjectEstimatedSizeMb(activeProject)} MB)`}
+          >
+            <Download className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="hidden sm:inline">
+              Download Project ({getProjectEstimatedSizeMb(activeProject)} MB)
+            </span>
           </button>
 
           <button

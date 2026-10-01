@@ -3,17 +3,26 @@ import {
   Camera,
   CheckCircle2,
   Cpu,
+  Download,
+  Maximize2,
+  Minimize2,
+  Monitor,
   Play,
   Plug,
   Plus,
   RotateCcw,
   ShieldCheck,
   Smartphone,
+  Tablet,
   Trash2,
   Wifi,
   XCircle,
 } from 'lucide-react';
 import { useIdeStore } from '../stores/ideStore';
+import {
+  downloadFullProjectZip,
+  getProjectEstimatedSizeMb,
+} from '../services/projectExporter';
 import { parseAndroidXmlNodes } from '../components/Editor/XmlLayoutDesigner';
 
 export const DeviceManagerView: React.FC = () => {
@@ -30,6 +39,8 @@ export const DeviceManagerView: React.FC = () => {
   const [pairCodeInput, setPairCodeInput] = useState('748291');
   const [tapCount, setTapCount] = useState(0);
   const [deviceNotice, setDeviceNotice] = useState<string | null>(null);
+  const [previewViewport, setPreviewViewport] = useState<'phone' | 'tablet' | 'full'>('full');
+  const [fullscreenRunner, setFullscreenRunner] = useState(false);
 
   // Interactive state for React & Flutter live device runners
   const [reactDraft, setReactDraft] = useState('');
@@ -101,20 +112,38 @@ export const DeviceManagerView: React.FC = () => {
               Device Manager & Live {activeProject.language} App Runner
             </h1>
             <p className="text-xs sm:text-sm text-slate-400 mt-1">
-              Test your {activeProject.language} ({activeProject.buildSystem}) application live on the connected Android 14 target.
+              Test your {activeProject.language} ({activeProject.buildSystem}) application in full-size preview or on connected Android 14 targets.
             </p>
           </div>
 
-          {deviceNotice && (
-            <div className="px-3.5 py-2 rounded-lg bg-emerald-950/80 border border-emerald-700/60 text-xs text-emerald-300">
-              {deviceNotice}
-            </div>
-          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={async () => {
+                const estMb = getProjectEstimatedSizeMb(activeProject);
+                setDeviceNotice(`Packaging & downloading ${activeProject.name}-Full-Project.zip (${estMb} MB)...`);
+                await downloadFullProjectZip(activeProject);
+                setTimeout(() => setDeviceNotice(null), 2600);
+              }}
+              className="px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-semibold text-xs flex items-center gap-2 cursor-pointer"
+            >
+              <Download className="w-4 h-4" />
+              <span>
+                Download Full Project (.zip · {getProjectEstimatedSizeMb(activeProject)} MB)
+              </span>
+            </button>
+
+            {deviceNotice && (
+              <div className="px-3.5 py-2 rounded-lg bg-emerald-950/80 border border-emerald-700/60 text-xs text-emerald-300">
+                {deviceNotice}
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Left Column: Device Targets & Wireless ADB Pairing */}
-          <div className="lg:col-span-7 space-y-6">
+          <div className="lg:col-span-5 space-y-6">
             <div className="p-5 rounded-xl bg-[#111827] border border-slate-800/80 space-y-4">
               <div className="flex items-center justify-between">
                 <h2 className="text-base font-semibold text-slate-100">Available Targets</h2>
@@ -255,19 +284,64 @@ export const DeviceManagerView: React.FC = () => {
             </form>
           </div>
 
-          {/* Right Column: Interactive Device App Runner (Supports Kotlin, Java, React, and Flutter!) */}
-          <div className="lg:col-span-5 p-5 rounded-xl bg-[#111827] border border-slate-800/80 flex flex-col items-center space-y-4">
-            <div className="w-full flex items-center justify-between">
+          {/* Right Column: Large Interactive Device & Website App Runner (Supports Kotlin, Java, React, and Flutter!) */}
+          <div
+            className={`${
+              fullscreenRunner
+                ? 'fixed inset-0 z-50 p-6 bg-[#0B0F17] overflow-y-auto'
+                : 'lg:col-span-7 p-5 rounded-xl bg-[#111827] border border-slate-800/80'
+            } flex flex-col items-center space-y-4`}
+          >
+            <div className="w-full flex flex-wrap items-center justify-between gap-2">
               <div>
                 <h2 className="text-base font-semibold text-slate-100">
-                  Live {activeProject.language} App Runner
+                  Live {activeProject.language} Website & App Preview ({getProjectEstimatedSizeMb(activeProject)} MB)
                 </h2>
                 <p className="text-xs text-slate-400">
                   Running:{' '}
                   <span className="font-mono text-emerald-400">{activeProject.packageName}</span>
                 </p>
               </div>
-              <div className="flex items-center gap-1.5">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <div className="flex items-center bg-slate-900 p-0.5 rounded-lg border border-slate-800 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setPreviewViewport('phone')}
+                    className={`flex items-center gap-1 px-2 py-1 rounded-md cursor-pointer ${
+                      previewViewport === 'phone'
+                        ? 'bg-emerald-600 text-slate-950 font-semibold'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <Smartphone className="w-3.5 h-3.5" />
+                    <span>Phone</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewViewport('tablet')}
+                    className={`flex items-center gap-1 px-2 py-1 rounded-md cursor-pointer ${
+                      previewViewport === 'tablet'
+                        ? 'bg-emerald-600 text-slate-950 font-semibold'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <Tablet className="w-3.5 h-3.5" />
+                    <span>Tablet</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewViewport('full')}
+                    className={`flex items-center gap-1 px-2 py-1 rounded-md cursor-pointer ${
+                      previewViewport === 'full'
+                        ? 'bg-emerald-600 text-slate-950 font-semibold'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <Monitor className="w-3.5 h-3.5" />
+                    <span>Full Size (100%)</span>
+                  </button>
+                </div>
+
                 <button
                   type="button"
                   onClick={handleHotReload}
@@ -285,19 +359,39 @@ export const DeviceManagerView: React.FC = () => {
                 >
                   <Camera className="w-3.5 h-3.5 text-emerald-400" />
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setFullscreenRunner(!fullscreenRunner)}
+                  className="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs text-slate-300 flex items-center gap-1 cursor-pointer"
+                  title={fullscreenRunner ? 'Exit Fullscreen' : 'Maximize Fullscreen Preview'}
+                >
+                  {fullscreenRunner ? (
+                    <Minimize2 className="w-3.5 h-3.5 text-emerald-400" />
+                  ) : (
+                    <Maximize2 className="w-3.5 h-3.5" />
+                  )}
+                </button>
               </div>
             </div>
 
-            {/* Interactive Phone Runner Frame */}
-            <div className="w-full max-w-[300px] rounded-[28px] border-4 border-slate-800 bg-slate-950 shadow-xl overflow-hidden flex flex-col">
-              <div className="h-6 px-4 bg-slate-950 flex items-center justify-between text-[10px] font-mono text-slate-400 border-b border-slate-800">
-                <span>09:41</span>
-                <span>{activeProject.language} · API 34</span>
+            {/* Interactive Large Responsive App / Website Runner Frame */}
+            <div
+              className={`w-full ${
+                previewViewport === 'phone'
+                  ? 'max-w-[440px]'
+                  : previewViewport === 'tablet'
+                  ? 'max-w-[768px]'
+                  : 'max-w-full'
+              } rounded-2xl border-2 border-slate-800 bg-slate-950 shadow-2xl overflow-hidden flex flex-col flex-1 transition-all`}
+            >
+              <div className="h-8 px-4 bg-slate-950 flex items-center justify-between text-xs font-mono text-slate-400 border-b border-slate-800">
+                <span>09:41 · {activeProject.name}</span>
+                <span>{activeProject.language} · API 34 · {getProjectEstimatedSizeMb(activeProject)} MB</span>
               </div>
 
               {/* FLUTTER LIVE RUNTIME */}
               {activeProject.language === 'Flutter' ? (
-                <div className="p-4 flex-1 min-h-[380px] flex flex-col justify-between bg-[#0D1524] relative">
+                <div className="p-6 flex-1 min-h-[520px] flex flex-col justify-between bg-[#0D1524] relative">
                   <div className="space-y-3">
                     <div className="pb-2 border-b border-slate-800 flex items-center justify-between">
                       <span className="text-sm font-bold text-sky-300">
@@ -374,7 +468,7 @@ export const DeviceManagerView: React.FC = () => {
                 </div>
               ) : activeProject.language === 'React' ? (
                 /* REACT + CAPACITOR LIVE RUNTIME */
-                <div className="p-4 flex-1 min-h-[380px] flex flex-col justify-between bg-[#0B111E]">
+                <div className="p-6 flex-1 min-h-[520px] flex flex-col justify-between bg-[#0B111E]">
                   <div className="space-y-3">
                     <div className="pb-2 border-b border-slate-800 flex items-center justify-between">
                       <span className="text-sm font-bold text-indigo-300">
@@ -434,7 +528,7 @@ export const DeviceManagerView: React.FC = () => {
               ) : (
                 /* KOTLIN & JAVA NATIVE XML RUNTIME */
                 <div
-                  className="p-4 flex-1 min-h-[380px] flex flex-col gap-3"
+                  className="p-6 flex-1 min-h-[520px] flex flex-col gap-4"
                   style={{ backgroundColor: parsedXml.rootBg || '#0F172A' }}
                 >
                   {parsedXml.nodes.map((node, i) => (

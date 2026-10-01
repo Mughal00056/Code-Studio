@@ -1,5 +1,4 @@
 import React, { useMemo, useState } from 'react';
-import JSZip from 'jszip';
 import {
   CheckCircle2,
   CircleDot,
@@ -20,6 +19,11 @@ import {
 } from 'lucide-react';
 import { useIdeStore } from '../../stores/ideStore';
 import { ANDROID_PERMISSIONS_LIST } from '../../services/templates';
+import {
+  downloadFullApkArtifact,
+  downloadFullProjectZip,
+  getProjectEstimatedSizeMb,
+} from '../../services/projectExporter';
 import { ApkArtifact, ProjectBuildSystem, ProjectLanguage } from '../../types/ide';
 
 const BUILD_TARGETS: {
@@ -76,27 +80,17 @@ export const BuildAndApkView: React.FC = () => {
   };
 
   const handleDownloadOrShareApk = async (apk: ApkArtifact) => {
-    const zip = new JSZip();
-    zip.file(
-      'AndroidManifest.xml',
-      `<?xml version="1.0" encoding="utf-8"?>\n<manifest package="${apk.packageName}" android:versionCode="${apk.versionCode}" android:versionName="${apk.versionName}">\n  <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34" />\n${apk.permissions.map((p) => `  <uses-permission android:name="${p}" />`).join('\n')}\n</manifest>`
-    );
-    zip.file(
-      'META-INF/MANIFEST.MF',
-      `Manifest-Version: 1.0\nCreated-By: CodeStudio Mobile (${apk.buildSystem})\nPackage: ${apk.packageName}\nLanguage: ${apk.language}\nVariant: ${apk.variant}\n`
-    );
-    zip.file(
-      'classes.dex.txt',
-      `DEX Bytecode for ${apk.activities.join(', ')} (${apk.language} · ${apk.buildSystem})`
-    );
-    const blob = await zip.generateAsync({ type: 'blob' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = apk.fileName;
-    a.click();
-    URL.revokeObjectURL(url);
-    showToast(`Downloaded ${apk.fileName} to device storage`);
+    const sizeMb = (apk.sizeBytes / (1024 * 1024)).toFixed(2);
+    showToast(`Packaging & downloading ${apk.fileName} (${sizeMb} MB)...`);
+    await downloadFullApkArtifact(apk, activeProject);
+    showToast(`Downloaded full ${apk.fileName} (${sizeMb} MB) with embedded source`);
+  };
+
+  const handleDownloadFullProject = async () => {
+    const estMb = getProjectEstimatedSizeMb(activeProject);
+    showToast(`Packaging full project ${activeProject.name} (${estMb} MB)...`);
+    await downloadFullProjectZip(activeProject);
+    showToast(`Downloaded ${activeProject.name}-Full-Project.zip (${estMb} MB)`);
   };
 
   const handleExtractApk = (apk: ApkArtifact) => {
@@ -135,14 +129,27 @@ ${apk.activities.map((a) => `- ${a}`).join('\n')}
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={handleDownloadFullProject}
+              className="px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-semibold text-xs flex items-center gap-2 cursor-pointer"
+            >
+              <Download className="w-4 h-4" />
+              <span>
+                Download Full Project (.zip · {getProjectEstimatedSizeMb(activeProject)} MB)
+              </span>
+            </button>
+
             <button
               type="button"
               onClick={() => setSdkManagerModalOpen(true)}
               className="px-3.5 py-2 rounded-lg bg-[#111827] hover:bg-slate-800 border border-slate-800 text-xs font-medium text-slate-200 flex items-center gap-2 cursor-pointer"
             >
               <Cpu className="w-4 h-4 text-emerald-400" />
-              <span>SDK & Toolchain Installer ({toolchains.filter((t) => t.installed).length}/6 Ready)</span>
+              <span>
+                SDK & NDK Pre-Installed ({toolchains.filter((t) => t.installed).length}/{toolchains.length} Ready)
+              </span>
             </button>
 
             {statusBanner && (
@@ -339,7 +346,7 @@ ${apk.activities.map((a) => `- ${a}`).join('\n')}
                     {latestArtifact.outputPath}
                   </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
                   <button
                     type="button"
                     onClick={() => setActiveInstallApk(latestArtifact)}
@@ -353,8 +360,18 @@ ${apk.activities.map((a) => `- ${a}`).join('\n')}
                     onClick={() => handleDownloadOrShareApk(latestArtifact)}
                     className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs flex items-center gap-1.5 border border-slate-700 cursor-pointer"
                   >
-                    <Share2 className="w-3.5 h-3.5" />
-                    <span>Download</span>
+                    <Download className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>
+                      Download APK ({(latestArtifact.sizeBytes / (1024 * 1024)).toFixed(1)} MB)
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDownloadFullProject}
+                    className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs flex items-center gap-1.5 border border-slate-700 cursor-pointer"
+                  >
+                    <Share2 className="w-3.5 h-3.5 text-sky-400" />
+                    <span>Full Project ZIP</span>
                   </button>
                   <button
                     type="button"

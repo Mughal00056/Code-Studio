@@ -136,7 +136,15 @@ export interface ConnectedDevice {
 export interface ToolchainPackage {
   id: string;
   name: string;
-  category: 'Kotlin' | 'Java' | 'Gradle' | 'React' | 'Flutter' | 'Android SDK';
+  category:
+    | 'Kotlin'
+    | 'Java'
+    | 'Gradle'
+    | 'React'
+    | 'Flutter'
+    | 'Android SDK'
+    | 'Android NDK'
+    | 'CMake & C++';
   version: string;
   sizeMb: number;
   installed: boolean;

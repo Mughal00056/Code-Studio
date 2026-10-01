@@ -5,9 +5,13 @@ import {
   Image as ImageIcon,
   Layers,
   Layout,
+  Maximize2,
+  Minimize2,
+  Monitor,
   Plus,
   Smartphone,
   Square,
+  Tablet,
   Trash2,
   Type,
 } from 'lucide-react';
@@ -121,9 +125,13 @@ export function parseAndroidXmlNodes(xmlContent: string): {
   rootBg: string;
   nodes: ParsedXmlNode[];
 } {
-  const rootMatch = xmlContent.match(/<(LinearLayout|ConstraintLayout|ScrollView|RelativeLayout|FrameLayout)([^>]*)>/i);
+  const rootMatch = xmlContent.match(
+    /<(LinearLayout|ConstraintLayout|ScrollView|RelativeLayout|FrameLayout)([^>]*)>/i
+  );
   const rootTag = rootMatch ? rootMatch[1] : 'LinearLayout';
-  const rootBg = rootMatch ? extractAttr(rootMatch[2], 'android:background', '#0F172A') : '#0F172A';
+  const rootBg = rootMatch
+    ? extractAttr(rootMatch[2], 'android:background', '#0F172A')
+    : '#0F172A';
 
   const childRegex = /<(TextView|Button|EditText|ImageView|Switch|ProgressBar)\b([\s\S]*?)\/>/gi;
   const nodes: ParsedXmlNode[] = [];
@@ -144,7 +152,11 @@ export function parseAndroidXmlNodes(xmlContent: string): {
       height: extractAttr(rawBlock, 'android:layout_height', 'wrap_content'),
       textSize: extractAttr(rawBlock, 'android:textSize', '16sp'),
       textColor: extractAttr(rawBlock, 'android:textColor', '#F8FAFC'),
-      background: extractAttr(rawBlock, 'android:background', tag === 'Button' ? '#10B981' : 'transparent'),
+      background: extractAttr(
+        rawBlock,
+        'android:background',
+        tag === 'Button' ? '#10B981' : 'transparent'
+      ),
       rawBlock,
     });
     i++;
@@ -163,13 +175,30 @@ export const XmlLayoutDesigner: React.FC<XmlLayoutDesignerProps> = ({
   xmlContent,
   onChangeXml,
 }) => {
-  const { appendLogcat } = useIdeStore();
+  const { appendLogcat, projects, activeProjectId } = useIdeStore();
   const [selectedIndex, setSelectedIndex] = useState<number | null>(0);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [draggedWidgetTag, setDraggedWidgetTag] = useState<string | null>(null);
   const [inputValues, setInputValues] = useState<Record<string, string>>({});
+  // Default to 'full' so the project preview is large and spacious!
+  const [viewportSize, setViewportSize] = useState<'phone' | 'tablet' | 'full'>('full');
+  const [isFullscreenModal, setIsFullscreenModal] = useState(false);
 
-  const parsed = useMemo(() => parseAndroidXmlNodes(xmlContent), [xmlContent]);
+  const activeProject = useMemo(
+    () => projects.find((p) => p.id === activeProjectId) || projects[0],
+    [projects, activeProjectId]
+  );
+
+  // If the current file isn't an XML file, fallback to parsing the project's activity_main.xml so preview works on any file!
+  const effectiveXml = useMemo(() => {
+    if (xmlContent.includes('<') && xmlContent.includes('android:')) {
+      return xmlContent;
+    }
+    const projectXml = activeProject?.files.find((f) => f.name === 'activity_main.xml')?.content;
+    return projectXml || xmlContent;
+  }, [xmlContent, activeProject]);
+
+  const parsed = useMemo(() => parseAndroidXmlNodes(effectiveXml), [effectiveXml]);
   const selectedNode =
     selectedIndex !== null && parsed.nodes[selectedIndex]
       ? parsed.nodes[selectedIndex]
@@ -178,14 +207,15 @@ export const XmlLayoutDesigner: React.FC<XmlLayoutDesignerProps> = ({
   const insertWidgetByTag = (tag: string) => {
     const widget = PALETTE_WIDGETS.find((w) => w.tag === tag) || PALETTE_WIDGETS[0];
     const snippet = widget.snippet(parsed.nodes.length + 1);
-    const closingTagRegex = /<\/\s*(LinearLayout|ConstraintLayout|ScrollView|RelativeLayout|FrameLayout)\s*>/i;
-    if (closingTagRegex.test(xmlContent)) {
-      const updated = xmlContent.replace(closingTagRegex, `\n${snippet}\n\n</$1>`);
+    const closingTagRegex =
+      /<\/\s*(LinearLayout|ConstraintLayout|ScrollView|RelativeLayout|FrameLayout)\s*>/i;
+    if (closingTagRegex.test(effectiveXml)) {
+      const updated = effectiveXml.replace(closingTagRegex, `\n${snippet}\n\n</$1>`);
       onChangeXml(updated);
       setSelectedIndex(parsed.nodes.length);
       appendLogcat('D', 'LayoutDesigner', `Added <${widget.tag}> to XML layout hierarchy`);
     } else {
-      onChangeXml(`${xmlContent}\n${snippet}`);
+      onChangeXml(`${effectiveXml}\n${snippet}`);
     }
   };
 
@@ -198,12 +228,12 @@ export const XmlLayoutDesigner: React.FC<XmlLayoutDesignerProps> = ({
     } else {
       updatedBlock = updatedBlock.replace(/\s*\/>$/, `\n        ${attr}="${value}" />`);
     }
-    const nextXml = xmlContent.replace(selectedNode.rawBlock, updatedBlock);
+    const nextXml = effectiveXml.replace(selectedNode.rawBlock, updatedBlock);
     onChangeXml(nextXml);
   };
 
   const deleteNode = (node: ParsedXmlNode) => {
-    const nextXml = xmlContent.replace(node.rawBlock, '').replace(/\n{3,}/g, '\n\n');
+    const nextXml = effectiveXml.replace(node.rawBlock, '').replace(/\n{3,}/g, '\n\n');
     onChangeXml(nextXml);
     setSelectedIndex(null);
     appendLogcat('D', 'LayoutDesigner', `Removed view @+id/${node.id} from XML`);
@@ -217,7 +247,7 @@ export const XmlLayoutDesigner: React.FC<XmlLayoutDesignerProps> = ({
     const second = parsed.nodes[Math.max(fromIndex, targetIndex)];
 
     const placeholder = '__XML_SWAP_PLACEHOLDER__';
-    const step1 = xmlContent.replace(first.rawBlock, placeholder);
+    const step1 = effectiveXml.replace(first.rawBlock, placeholder);
     const step2 = step1.replace(second.rawBlock, first.rawBlock);
     const step3 = step2.replace(placeholder, second.rawBlock);
 
@@ -232,10 +262,23 @@ export const XmlLayoutDesigner: React.FC<XmlLayoutDesignerProps> = ({
     setTimeout(() => setToastMsg(null), 2200);
   };
 
+  const containerMaxWidth =
+    viewportSize === 'phone'
+      ? 'max-w-[440px]'
+      : viewportSize === 'tablet'
+      ? 'max-w-[768px]'
+      : 'max-w-full';
+
   return (
-    <div className="flex flex-col lg:flex-row h-full bg-[#0B0F17] text-slate-200 overflow-y-auto lg:overflow-hidden">
+    <div
+      className={`${
+        isFullscreenModal
+          ? 'fixed inset-0 z-50 bg-[#0B0F17]'
+          : 'flex flex-col lg:flex-row h-full bg-[#0B0F17]'
+      } text-slate-200 overflow-y-auto lg:overflow-hidden flex`}
+    >
       {/* Left Widget Palette */}
-      <div className="w-full lg:w-56 border-b lg:border-b-0 lg:border-r border-slate-800/80 p-3 flex flex-col gap-2 shrink-0 bg-[#0E1420]">
+      <div className="w-full lg:w-52 border-b lg:border-b-0 lg:border-r border-slate-800/80 p-3 flex flex-col gap-2 shrink-0 bg-[#0E1420]">
         <div className="flex items-center justify-between">
           <span className="text-xs font-semibold text-slate-300">Widget Palette</span>
           <span className="text-[11px] text-slate-500">Tap or Drag</span>
@@ -250,7 +293,7 @@ export const XmlLayoutDesigner: React.FC<XmlLayoutDesignerProps> = ({
                 onDragStart={() => setDraggedWidgetTag(w.tag)}
                 onDragEnd={() => setDraggedWidgetTag(null)}
                 onClick={() => insertWidgetByTag(w.tag)}
-                className="flex items-center justify-between px-2.5 py-2 min-h-[40px] rounded-lg bg-slate-900/90 hover:bg-slate-800 border border-slate-800/90 text-left text-xs text-slate-200 transition-colors group"
+                className="flex items-center justify-between px-2.5 py-2 min-h-[40px] rounded-lg bg-slate-900/90 hover:bg-slate-800 border border-slate-800/90 text-left text-xs text-slate-200 transition-colors group cursor-pointer"
                 title={`Add ${w.label} to XML`}
               >
                 <span className="flex items-center gap-2 truncate">
@@ -264,9 +307,9 @@ export const XmlLayoutDesigner: React.FC<XmlLayoutDesignerProps> = ({
         </div>
       </div>
 
-      {/* Center Android Phone Surface */}
+      {/* Center Large Interactive Project / Website / App Preview Surface */}
       <div
-        className="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 bg-[#0B0F17] relative min-h-[420px]"
+        className="flex-1 flex flex-col items-center p-3 sm:p-5 bg-[#0B0F17] relative overflow-y-auto"
         onDragOver={(e) => e.preventDefault()}
         onDrop={() => {
           if (draggedWidgetTag) {
@@ -275,46 +318,105 @@ export const XmlLayoutDesigner: React.FC<XmlLayoutDesignerProps> = ({
           }
         }}
       >
-        <div className="mb-2 flex items-center gap-3 text-xs text-slate-400">
-          <span>Root: {parsed.rootTag}</span>
-          <span aria-hidden="true">·</span>
-          <span>{parsed.nodes.length} Views</span>
-          <span aria-hidden="true">·</span>
-          <span>Interactive Preview</span>
-        </div>
-
-        {/* Android Device Mockup Canvas */}
-        <div
-          className="w-full max-w-[310px] rounded-[28px] border-4 border-slate-800 bg-slate-950 shadow-2xl overflow-hidden flex flex-col"
-          style={{ minHeight: '460px' }}
-        >
-          {/* Android Status Bar */}
-          <div className="h-7 px-4 bg-slate-950 flex items-center justify-between text-[11px] font-mono text-slate-400 border-b border-slate-800/60">
-            <span>09:41</span>
-            <div className="w-12 h-2.5 rounded-full bg-slate-900 border border-slate-800" />
-            <span>5G · 88%</span>
+        {/* Top Preview Size & Fullscreen Toolbar */}
+        <div className="w-full flex flex-wrap items-center justify-between gap-2 mb-3 pb-2 border-b border-slate-800/80">
+          <div className="flex items-center gap-2 text-xs text-slate-300">
+            <span className="font-semibold text-slate-100">{activeProject.name} Preview</span>
+            <span aria-hidden="true">·</span>
+            <span className="text-emerald-400 font-mono">{activeProject.language}</span>
+            <span aria-hidden="true">·</span>
+            <span>{parsed.nodes.length} Views</span>
           </div>
 
-          {/* Inflated XML View Hierarchy */}
+          <div className="flex items-center gap-1.5">
+            <div className="flex items-center bg-slate-900 p-0.5 rounded-lg border border-slate-800 text-xs">
+              <button
+                type="button"
+                onClick={() => setViewportSize('phone')}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
+                  viewportSize === 'phone'
+                    ? 'bg-emerald-600 text-slate-950 font-semibold'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Smartphone className="w-3.5 h-3.5" />
+                <span>Phone (440px)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewportSize('tablet')}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
+                  viewportSize === 'tablet'
+                    ? 'bg-emerald-600 text-slate-950 font-semibold'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Tablet className="w-3.5 h-3.5" />
+                <span>Tablet (768px)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewportSize('full')}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
+                  viewportSize === 'full'
+                    ? 'bg-emerald-600 text-slate-950 font-semibold'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Monitor className="w-3.5 h-3.5" />
+                <span>Full Size (100%)</span>
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setIsFullscreenModal(!isFullscreenModal)}
+              className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 cursor-pointer"
+              title={isFullscreenModal ? 'Exit Fullscreen Preview' : 'Maximize Fullscreen Preview'}
+            >
+              {isFullscreenModal ? (
+                <Minimize2 className="w-4 h-4 text-emerald-400" />
+              ) : (
+                <Maximize2 className="w-4 h-4" />
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Large Responsive Android / Website Preview Canvas */}
+        <div
+          className={`w-full ${containerMaxWidth} flex-1 rounded-2xl border-2 border-slate-800 bg-slate-950 shadow-2xl overflow-hidden flex flex-col transition-all`}
+          style={{ minHeight: '540px' }}
+        >
+          {/* Status Bar */}
+          <div className="h-8 px-5 bg-slate-950 flex items-center justify-between text-xs font-mono text-slate-400 border-b border-slate-800/70">
+            <span>09:41 · {activeProject.name}</span>
+            <span>{activeProject.packageName}</span>
+            <span>5G · 100%</span>
+          </div>
+
+          {/* Inflated View Hierarchy */}
           <div
-            className="flex-1 p-4 flex flex-col gap-3 relative transition-colors"
+            className="flex-1 p-6 sm:p-8 flex flex-col gap-4 relative transition-colors overflow-y-auto"
             style={{ backgroundColor: parsed.rootBg || '#0F172A' }}
           >
             {parsed.nodes.length === 0 ? (
-              <div className="flex-1 flex flex-col items-center justify-center text-center p-4 border border-dashed border-slate-700 rounded-xl text-xs text-slate-400">
+              <div className="flex-1 flex flex-col items-center justify-center text-center p-6 border border-dashed border-slate-700 rounded-xl text-sm text-slate-400">
                 <p>Empty {parsed.rootTag}</p>
-                <p className="mt-1 text-slate-500">Tap any widget in the palette to insert it into XML.</p>
+                <p className="mt-1 text-slate-500">
+                  Tap any widget in the palette on the left to insert it into the layout.
+                </p>
               </div>
             ) : (
               parsed.nodes.map((node, idx) => {
                 const isSelected = selectedNode?.index === idx;
-                const fontSizePx = parseInt(node.textSize, 10) || 16;
+                const fontSizePx = parseInt(node.textSize, 10) || 18;
 
                 return (
                   <div
                     key={`${node.id}-${idx}`}
                     onClick={() => setSelectedIndex(idx)}
-                    className={`relative rounded-lg transition-all cursor-pointer ${
+                    className={`relative rounded-xl transition-all cursor-pointer ${
                       isSelected
                         ? 'ring-2 ring-emerald-400 ring-offset-2 ring-offset-slate-950'
                         : 'hover:ring-1 hover:ring-slate-600'
@@ -322,9 +424,9 @@ export const XmlLayoutDesigner: React.FC<XmlLayoutDesignerProps> = ({
                   >
                     {node.tag === 'TextView' && (
                       <div
-                        className="py-1 px-1.5 break-words"
+                        className="py-1.5 px-2 break-words font-medium"
                         style={{
-                          fontSize: `${Math.min(Math.max(fontSizePx, 12), 28)}px`,
+                          fontSize: `${Math.min(Math.max(fontSizePx, 14), 32)}px`,
                           color: node.textColor || '#F8FAFC',
                         }}
                       >
@@ -340,7 +442,7 @@ export const XmlLayoutDesigner: React.FC<XmlLayoutDesignerProps> = ({
                           setInputValues((prev) => ({ ...prev, [node.id]: e.target.value }))
                         }
                         placeholder={node.hint || node.text || `EditText (${node.id})`}
-                        className="w-full px-3 py-2 rounded-md bg-slate-900/90 border-b-2 border-emerald-500/70 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none"
+                        className="w-full px-4 py-3 rounded-lg bg-slate-900/90 border-b-2 border-emerald-500/70 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none"
                       />
                     )}
 
@@ -352,7 +454,7 @@ export const XmlLayoutDesigner: React.FC<XmlLayoutDesignerProps> = ({
                           setSelectedIndex(idx);
                           triggerPreviewButton(node);
                         }}
-                        className="w-full py-2.5 px-4 rounded-lg font-semibold text-xs text-slate-950 shadow-sm active:scale-[0.99] transition-transform"
+                        className="w-full py-3.5 px-5 rounded-xl font-semibold text-sm text-slate-950 shadow-md active:scale-[0.99] transition-transform cursor-pointer"
                         style={{
                           backgroundColor:
                             node.background && node.background !== 'transparent'
@@ -367,11 +469,11 @@ export const XmlLayoutDesigner: React.FC<XmlLayoutDesignerProps> = ({
 
                     {node.tag === 'ImageView' && (
                       <div
-                        className="w-full h-24 rounded-lg border border-slate-700/80 flex flex-col items-center justify-center gap-1 text-slate-400"
+                        className="w-full h-36 rounded-xl border border-slate-700/80 flex flex-col items-center justify-center gap-1.5 text-slate-400"
                         style={{ backgroundColor: node.background || '#1E293B' }}
                       >
-                        <ImageIcon className="w-6 h-6 text-emerald-400" />
-                        <span className="text-[11px] font-mono">@+id/{node.id}</span>
+                        <ImageIcon className="w-8 h-8 text-emerald-400" />
+                        <span className="text-xs font-mono">@+id/{node.id}</span>
                       </div>
                     )}
                   </div>
@@ -381,15 +483,15 @@ export const XmlLayoutDesigner: React.FC<XmlLayoutDesignerProps> = ({
 
             {/* Simulated Android Toast Notification */}
             {toastMsg && (
-              <div className="absolute bottom-3 left-3 right-3 px-3 py-2 rounded-full bg-slate-900/95 border border-slate-700 text-[11px] text-center text-emerald-300 shadow-lg">
+              <div className="absolute bottom-4 left-6 right-6 px-4 py-2.5 rounded-full bg-slate-900/95 border border-slate-700 text-xs text-center text-emerald-300 shadow-lg">
                 {toastMsg}
               </div>
             )}
           </div>
 
-          {/* Android Gesture Navigation Pill */}
-          <div className="h-6 bg-slate-950 flex items-center justify-center border-t border-slate-900">
-            <div className="w-24 h-1 rounded-full bg-slate-700" />
+          {/* Gesture Navigation Bar */}
+          <div className="h-7 bg-slate-950 flex items-center justify-center border-t border-slate-900">
+            <div className="w-32 h-1.5 rounded-full bg-slate-700" />
           </div>
         </div>
       </div>
@@ -411,7 +513,10 @@ export const XmlLayoutDesigner: React.FC<XmlLayoutDesignerProps> = ({
                 type="text"
                 value={selectedNode.id}
                 onChange={(e) =>
-                  updateSelectedNodeAttribute('android:id', `@+id/${e.target.value.replace(/^@\+?id\//, '')}`)
+                  updateSelectedNodeAttribute(
+                    'android:id',
+                    `@+id/${e.target.value.replace(/^@\+?id\//, '')}`
+                  )
                 }
                 className="w-full px-2.5 py-1.5 rounded bg-slate-900 border border-slate-800 font-mono text-xs text-slate-100"
               />
@@ -441,7 +546,9 @@ export const XmlLayoutDesigner: React.FC<XmlLayoutDesignerProps> = ({
                 <label className="block text-[11px] text-slate-400 mb-1">layout_width</label>
                 <select
                   value={selectedNode.width}
-                  onChange={(e) => updateSelectedNodeAttribute('android:layout_width', e.target.value)}
+                  onChange={(e) =>
+                    updateSelectedNodeAttribute('android:layout_width', e.target.value)
+                  }
                   className="w-full px-2 py-1.5 rounded bg-slate-900 border border-slate-800 text-xs text-slate-100"
                 >
                   <option value="match_parent">match_parent</option>
@@ -452,7 +559,9 @@ export const XmlLayoutDesigner: React.FC<XmlLayoutDesignerProps> = ({
                 <label className="block text-[11px] text-slate-400 mb-1">layout_height</label>
                 <select
                   value={selectedNode.height}
-                  onChange={(e) => updateSelectedNodeAttribute('android:layout_height', e.target.value)}
+                  onChange={(e) =>
+                    updateSelectedNodeAttribute('android:layout_height', e.target.value)
+                  }
                   className="w-full px-2 py-1.5 rounded bg-slate-900 border border-slate-800 text-xs text-slate-100"
                 >
                   <option value="wrap_content">wrap_content</option>
@@ -468,7 +577,9 @@ export const XmlLayoutDesigner: React.FC<XmlLayoutDesignerProps> = ({
                   <input
                     type="text"
                     value={selectedNode.textSize}
-                    onChange={(e) => updateSelectedNodeAttribute('android:textSize', e.target.value)}
+                    onChange={(e) =>
+                      updateSelectedNodeAttribute('android:textSize', e.target.value)
+                    }
                     className="w-full px-2 py-1.5 rounded bg-slate-900 border border-slate-800 font-mono text-xs text-slate-100"
                   />
                 </div>
@@ -477,7 +588,9 @@ export const XmlLayoutDesigner: React.FC<XmlLayoutDesignerProps> = ({
                   <input
                     type="text"
                     value={selectedNode.textColor}
-                    onChange={(e) => updateSelectedNodeAttribute('android:textColor', e.target.value)}
+                    onChange={(e) =>
+                      updateSelectedNodeAttribute('android:textColor', e.target.value)
+                    }
                     className="w-full px-2 py-1.5 rounded bg-slate-900 border border-slate-800 font-mono text-xs text-slate-100"
                   />
                 </div>
@@ -517,7 +630,7 @@ export const XmlLayoutDesigner: React.FC<XmlLayoutDesignerProps> = ({
           </div>
         ) : (
           <p className="text-xs text-slate-500">
-            Select any element on the device preview canvas to inspect or modify its XML attributes.
+            Select any element on the preview canvas to inspect or modify its attributes.
           </p>
         )}
       </div>

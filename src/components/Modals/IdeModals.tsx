@@ -22,6 +22,11 @@ import {
 } from 'lucide-react';
 import { useIdeStore } from '../../stores/ideStore';
 import { ANDROID_PERMISSIONS_LIST, PROJECT_TEMPLATES } from '../../services/templates';
+import {
+  downloadFullApkArtifact,
+  downloadFullProjectZip,
+  getProjectEstimatedSizeMb,
+} from '../../services/projectExporter';
 import { ProjectBuildSystem, ProjectLanguage, ProjectTemplateId } from '../../types/ide';
 
 export const IdeModals: React.FC = () => {
@@ -198,6 +203,15 @@ export const IdeModals: React.FC = () => {
         icon: Hammer,
         action: () => {
           triggerBuild('apk', true);
+        },
+      },
+      {
+        id: 'download-full-project',
+        label: `Download Full Project ZIP (${activeProject.name} · ${getProjectEstimatedSizeMb(activeProject)} MB)`,
+        category: 'Export',
+        icon: Download,
+        action: () => {
+          downloadFullProjectZip(activeProject);
         },
       },
       {
@@ -572,10 +586,10 @@ export const IdeModals: React.FC = () => {
                 <Cpu className="w-5 h-5 text-emerald-400" />
                 <div>
                   <h2 className="text-base font-display font-bold text-slate-100">
-                    Android Studio SDK & Toolchain Installer
+                    Android SDK, NDK & Compilers (100% Pre-Installed)
                   </h2>
                   <p className="text-xs text-slate-400">
-                    Install & verify Kotlin, OpenJDK Java, Gradle, React Node.js, Flutter SDK, and Android SDK Platform 34.
+                    Android SDK 34, NDK r27b (C/C++), CMake 3.28, Kotlin 2.0, OpenJDK 17, Gradle 8.7, React 19, and Flutter 3.24 are pre-installed and ready offline.
                   </p>
                 </div>
               </div>
@@ -759,50 +773,71 @@ export const IdeModals: React.FC = () => {
               )}
 
               {/* Actions */}
-              <div className="pt-2 flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setActiveInstallApk(null)}
-                  className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium"
-                >
-                  Close
-                </button>
-
-                {installStage === 'ready' && (
+              <div className="pt-2 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5">
                   <button
                     type="button"
-                    onClick={startApkInstallation}
-                    className="px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-semibold flex items-center gap-1.5 cursor-pointer"
+                    onClick={() => downloadFullProjectZip(activeProject)}
+                    className="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-emerald-300 font-semibold text-xs flex items-center gap-1.5 cursor-pointer"
                   >
-                    <Download className="w-4 h-4" />
-                    <span>Install APK (100%)</span>
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Full Project ZIP ({getProjectEstimatedSizeMb(activeProject)} MB)</span>
                   </button>
-                )}
-
-                {installStage === 'installing' && (
                   <button
                     type="button"
-                    disabled
-                    className="px-5 py-2 rounded-lg bg-emerald-600/60 text-slate-950 font-semibold flex items-center gap-1.5"
+                    onClick={() => downloadFullApkArtifact(activeInstallApk, activeProject)}
+                    className="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sky-300 font-semibold text-xs flex items-center gap-1.5 cursor-pointer"
                   >
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Installing...</span>
+                    <Download className="w-3.5 h-3.5" />
+                    <span>APK ({(activeInstallApk.sizeBytes / (1024 * 1024)).toFixed(1)} MB)</span>
                   </button>
-                )}
+                </div>
 
-                {installStage === 'done' && (
+                <div className="flex items-center gap-2 ml-auto">
                   <button
                     type="button"
-                    onClick={() => {
-                      setActiveInstallApk(null);
-                      setActiveScreen('devices');
-                    }}
-                    className="px-5 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold flex items-center gap-1.5 cursor-pointer"
+                    onClick={() => setActiveInstallApk(null)}
+                    className="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium"
                   >
-                    <Play className="w-4 h-4 fill-current" />
-                    <span>Open Installed App</span>
+                    Close
                   </button>
-                )}
+
+                  {installStage === 'ready' && (
+                    <button
+                      type="button"
+                      onClick={startApkInstallation}
+                      className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-semibold flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span>Install APK (100%)</span>
+                    </button>
+                  )}
+
+                  {installStage === 'installing' && (
+                    <button
+                      type="button"
+                      disabled
+                      className="px-4 py-2 rounded-lg bg-emerald-600/60 text-slate-950 font-semibold flex items-center gap-1.5"
+                    >
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Installing...</span>
+                    </button>
+                  )}
+
+                  {installStage === 'done' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveInstallApk(null);
+                        setActiveScreen('devices');
+                      }}
+                      className="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Play className="w-4 h-4 fill-current" />
+                      <span>Open App</span>
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>

@@ -17,7 +17,7 @@ import {
 } from '../types/ide';
 import { createInitialProjects, detectLanguage, generateProjectFiles } from '../services/templates';
 
-const STORAGE_KEY = 'codestudio_mobile_state_v2';
+const STORAGE_KEY = 'codestudio_mobile_state_v3';
 
 interface TerminalLine {
   id: string;
@@ -149,6 +149,42 @@ function formatTimeNow(): string {
 
 const DEFAULT_TOOLCHAINS: ToolchainPackage[] = [
   {
+    id: 'tc-android-sdk',
+    name: 'Android SDK Platform 34 + Build-Tools + Platform-Tools',
+    category: 'Android SDK',
+    version: '34.0.0',
+    sizeMb: 215,
+    installed: true,
+    installing: false,
+    progress: 100,
+    description: 'Pre-installed Android 14 framework stubs, AAPT2 resource compiler, D8 dexer, ADB, and apksigner.',
+    binaryPath: '/data/data/com.codestudio/files/sdk/platforms/android-34',
+  },
+  {
+    id: 'tc-android-ndk',
+    name: 'Android NDK r27b (Side-by-Side C/C++ Native Toolchain)',
+    category: 'Android NDK',
+    version: '27.1.12297006',
+    sizeMb: 520,
+    installed: true,
+    installing: false,
+    progress: 100,
+    description: 'Pre-installed Android Native Development Kit with LLVM/Clang 18, JNI headers, sysroot, and ndk-build.',
+    binaryPath: '/data/data/com.codestudio/files/sdk/ndk/27.1.12297006/ndk-build',
+  },
+  {
+    id: 'tc-cmake',
+    name: 'CMake 3.28.1 + Ninja Native Build System',
+    category: 'CMake & C++',
+    version: '3.28.1',
+    sizeMb: 68,
+    installed: true,
+    installing: false,
+    progress: 100,
+    description: 'Pre-installed CMake & Ninja for compiling C/C++ JNI shared libraries (libnative-lib.so).',
+    binaryPath: '/data/data/com.codestudio/files/sdk/cmake/3.28.1/bin/cmake',
+  },
+  {
     id: 'tc-kotlin',
     name: 'Kotlin Compiler & K2 Engine',
     category: 'Kotlin',
@@ -157,7 +193,7 @@ const DEFAULT_TOOLCHAINS: ToolchainPackage[] = [
     installed: true,
     installing: false,
     progress: 100,
-    description: 'Official JetBrains Kotlin compiler (kotlinc), stdlib, and Android KTX extensions.',
+    description: 'Pre-installed JetBrains Kotlin compiler (kotlinc), stdlib, and Android KTX extensions.',
     binaryPath: '/data/data/com.codestudio/files/usr/bin/kotlinc',
   },
   {
@@ -169,7 +205,7 @@ const DEFAULT_TOOLCHAINS: ToolchainPackage[] = [
     installed: true,
     installing: false,
     progress: 100,
-    description: 'Full Java Development Kit (javac, java, jar, keytool) for Android compilation.',
+    description: 'Pre-installed Java Development Kit (javac, java, jar, keytool) for Android compilation.',
     binaryPath: '/data/data/com.codestudio/files/usr/bin/javac',
   },
   {
@@ -181,20 +217,8 @@ const DEFAULT_TOOLCHAINS: ToolchainPackage[] = [
     installed: true,
     installing: false,
     progress: 100,
-    description: 'Android Gradle Plugin (AGP 8.5), Kotlin DSL, and offline dependency cache.',
+    description: 'Pre-installed Android Gradle Plugin (AGP 8.5), Kotlin DSL, and offline dependency cache.',
     binaryPath: '/data/data/com.codestudio/files/usr/bin/gradle',
-  },
-  {
-    id: 'tc-android-sdk',
-    name: 'Android SDK Platform 34 + AAPT2 + D8',
-    category: 'Android SDK',
-    version: '34.0.0',
-    sizeMb: 215,
-    installed: true,
-    installing: false,
-    progress: 100,
-    description: 'Android 14 framework stubs, AAPT2 resource compiler, D8 dexer, and apksigner.',
-    binaryPath: '/data/data/com.codestudio/files/sdk/platforms/android-34',
   },
   {
     id: 'tc-react',
@@ -205,7 +229,7 @@ const DEFAULT_TOOLCHAINS: ToolchainPackage[] = [
     installed: true,
     installing: false,
     progress: 100,
-    description: 'Vite bundler, TypeScript compiler, npm, and Capacitor Android WebView bridge.',
+    description: 'Pre-installed Vite bundler, TypeScript compiler, npm, and Capacitor Android WebView bridge.',
     binaryPath: '/data/data/com.codestudio/files/usr/bin/node',
   },
   {
@@ -217,7 +241,7 @@ const DEFAULT_TOOLCHAINS: ToolchainPackage[] = [
     installed: true,
     installing: false,
     progress: 100,
-    description: 'Flutter framework, Dart AOT/JIT compiler, Material 3 widget catalog, and Gradle runner.',
+    description: 'Pre-installed Flutter framework, Dart AOT/JIT compiler, Material 3 widget catalog, and Gradle runner.',
     binaryPath: '/data/data/com.codestudio/files/flutter/bin/flutter',
   },
 ];
@@ -265,7 +289,7 @@ function loadPersistedState(): {
           projects: parsed.projects,
           settings: { ...DEFAULT_SETTINGS, ...(parsed.settings || {}) },
           apkArtifacts: parsed.apkArtifacts || [],
-          toolchains: parsed.toolchains || DEFAULT_TOOLCHAINS,
+          toolchains: DEFAULT_TOOLCHAINS,
         };
       }
     }
@@ -289,7 +313,7 @@ function loadPersistedState(): {
       versionCode: 1,
       minSdk: 'API 26 (Android 8.0)',
       targetSdk: 'API 34 (Android 14.0)',
-      sizeBytes: 2485120,
+      sizeBytes: 19485120,
       createdAt: Date.now() - 1000 * 60 * 12,
       outputPath: 'app/build/outputs/apk/debug/MyApp-debug.apk',
       permissions: [
@@ -304,6 +328,60 @@ function loadPersistedState(): {
       ],
       activities: ['com.example.myapp.MainActivity'],
       services: ['androidx.appcompat.app.AppLocalesMetadataHolderService'],
+      installedOnDeviceIds: ['dev-local-phone'],
+    },
+    {
+      id: 'apk-initial-2',
+      fileName: 'FlutterShop-debug.apk',
+      projectId: 'proj-fluttershop',
+      projectName: 'FlutterShop',
+      packageName: 'com.codestudio.fluttershop',
+      language: 'Flutter',
+      buildSystem: 'Flutter + Gradle',
+      variant: 'debug',
+      format: 'apk',
+      versionName: '1.0.0',
+      versionCode: 1,
+      minSdk: 'API 26 (Android 8.0)',
+      targetSdk: 'API 34 (Android 14.0)',
+      sizeBytes: 24910336,
+      createdAt: Date.now() - 1000 * 60 * 45,
+      outputPath: 'app/build/outputs/apk/debug/FlutterShop-debug.apk',
+      permissions: ['android.permission.INTERNET', 'android.permission.VIBRATE'],
+      grantedPermissions: ['android.permission.INTERNET', 'android.permission.VIBRATE'],
+      activities: ['com.codestudio.fluttershop.MainActivity'],
+      services: ['io.flutter.embedding.engine.FlutterEngineService'],
+      installedOnDeviceIds: ['dev-local-phone'],
+    },
+    {
+      id: 'apk-initial-3',
+      fileName: 'NotesApp-debug.apk',
+      projectId: 'proj-notesapp',
+      projectName: 'NotesApp',
+      packageName: 'com.codestudio.notesapp',
+      language: 'React',
+      buildSystem: 'React Vite + Capacitor',
+      variant: 'debug',
+      format: 'apk',
+      versionName: '1.0.0',
+      versionCode: 1,
+      minSdk: 'API 29 (Android 10.0)',
+      targetSdk: 'API 34 (Android 14.0)',
+      sizeBytes: 17825792,
+      createdAt: Date.now() - 1000 * 60 * 90,
+      outputPath: 'app/build/outputs/apk/debug/NotesApp-debug.apk',
+      permissions: [
+        'android.permission.INTERNET',
+        'android.permission.READ_EXTERNAL_STORAGE',
+        'android.permission.WRITE_EXTERNAL_STORAGE',
+      ],
+      grantedPermissions: [
+        'android.permission.INTERNET',
+        'android.permission.READ_EXTERNAL_STORAGE',
+        'android.permission.WRITE_EXTERNAL_STORAGE',
+      ],
+      activities: ['com.codestudio.notesapp.MainActivity'],
+      services: ['com.getcapacitor.BridgeWebViewClient'],
       installedOnDeviceIds: ['dev-local-phone'],
     },
   ];
@@ -1348,7 +1426,30 @@ export const useIdeStore = create<IdeState>((set, get) => ({
       appendLines([
         {
           type: 'output',
-          text: 'info: kotlinc-jvm 2.0.20 (JRE 17.0.11+9-android-arm64)\nKotlin K2 compiler ready.',
+          text: 'info: kotlinc-jvm 2.0.20 (JRE 17.0.11+9-android-arm64)\nKotlin K2 compiler pre-installed & ready.',
+        },
+      ]);
+      return;
+    }
+
+    if (base === 'ndk-build' || base === 'ndk') {
+      appendLines([
+        {
+          type: 'success',
+          text: 'Android NDK r27b (27.1.12297006) — Pre-installed\n[arm64-v8a] Compile++      : native-lib <= native-lib.cpp\n[arm64-v8a] SharedLibrary  : libnative-lib.so\n[arm64-v8a] Install        : libnative-lib.so => libs/arm64-v8a/libnative-lib.so',
+        },
+      ]);
+      return;
+    }
+
+    if (base === 'cmake' || base === 'clang' || base === 'clang++') {
+      appendLines([
+        {
+          type: 'output',
+          text:
+            base === 'cmake'
+              ? 'cmake version 3.28.1 (Android NDK Bundled Ninja Generator — Pre-installed)'
+              : 'Android (12285404, based on r522817) clang version 18.0.1 (https://android.googlesource.com/toolchain/llvm-project)\nTarget: aarch64-unknown-linux-android34',
         },
       ]);
       return;
@@ -1760,7 +1861,7 @@ export const useIdeStore = create<IdeState>((set, get) => ({
               versionCode: s.apkArtifacts.length + 1,
               minSdk: activeProject.minSdk,
               targetSdk: state.settings.androidSdkVersion,
-              sizeBytes: 2250000 + Math.floor(Math.random() * 950000),
+              sizeBytes: 19400000 + Math.floor(Math.random() * 6800000),
               createdAt: Date.now(),
               outputPath: outPath,
               permissions: projPerms,

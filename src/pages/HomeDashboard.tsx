@@ -20,6 +20,10 @@ import {
 } from 'lucide-react';
 import { useIdeStore } from '../stores/ideStore';
 import { detectLanguage, PROJECT_TEMPLATES } from '../services/templates';
+import {
+  downloadFullProjectZip,
+  getProjectEstimatedSizeMb,
+} from '../services/projectExporter';
 import { FileNode, ProjectTemplateId } from '../types/ide';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 
@@ -171,11 +175,28 @@ export const HomeDashboard: React.FC = () => {
 
             <button
               type="button"
+              onClick={async () => {
+                const activeProj =
+                  projects.find((p) => p.id === activeProjectId) || projects[0];
+                setImportStatus(
+                  `Packaging & downloading ${activeProj.name}-Full-Project.zip (${getProjectEstimatedSizeMb(activeProj)} MB)...`
+                );
+                await downloadFullProjectZip(activeProj);
+                setTimeout(() => setImportStatus(null), 2500);
+              }}
+              className="min-h-[44px] px-4 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-slate-950 font-semibold text-xs sm:text-sm flex items-center gap-2 transition-colors cursor-pointer"
+            >
+              <Download className="w-4 h-4" />
+              <span>Download Full Project (.zip)</span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => setSdkManagerModalOpen(true)}
               className="min-h-[44px] px-4 py-2.5 rounded-xl bg-[#111827] hover:bg-slate-800 text-slate-100 font-medium text-xs sm:text-sm border border-slate-800 flex items-center gap-2 transition-colors cursor-pointer"
             >
               <Cpu className="w-4 h-4 text-emerald-400" />
-              <span>SDK & Toolchains</span>
+              <span>SDK & NDK Ready</span>
             </button>
 
             <button
@@ -187,9 +208,9 @@ export const HomeDashboard: React.FC = () => {
                   setActiveInstallApk(apkArtifacts[0]);
                 }
               }}
-              className="min-h-[44px] px-4 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-slate-950 font-semibold text-xs sm:text-sm flex items-center gap-2 transition-colors cursor-pointer"
+              className="min-h-[44px] px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 font-semibold text-xs sm:text-sm border border-slate-700 flex items-center gap-2 transition-colors cursor-pointer"
             >
-              <Download className="w-4 h-4" />
+              <Package className="w-4 h-4 text-emerald-400" />
               <span>{isInstalled ? 'Install APK (100%)' : 'Install App'}</span>
             </button>
           </div>
@@ -376,6 +397,10 @@ export const HomeDashboard: React.FC = () => {
                           <span aria-hidden="true">·</span>
                           <span className="font-mono">{proj.packageName}</span>
                           <span aria-hidden="true">·</span>
+                          <span className="text-emerald-400 font-mono">
+                            {getProjectEstimatedSizeMb(proj)} MB
+                          </span>
+                          <span aria-hidden="true">·</span>
                           <span>{fileCount} files</span>
                           <span aria-hidden="true">·</span>
                           <span className="inline-flex items-center gap-1 text-slate-400">
@@ -387,6 +412,22 @@ export const HomeDashboard: React.FC = () => {
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          setImportStatus(
+                            `Downloading full project ${proj.name}-Full-Project.zip (${getProjectEstimatedSizeMb(proj)} MB)...`
+                          );
+                          await downloadFullProjectZip(proj);
+                          setTimeout(() => setImportStatus(null), 2500);
+                        }}
+                        className="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-xs font-medium text-emerald-300 flex items-center gap-1.5 transition-colors cursor-pointer"
+                        title="Download Full Project ZIP (Source + Gradle + NDK + APK)"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Download ZIP</span>
+                      </button>
                       <button
                         type="button"
                         onClick={(e) => {

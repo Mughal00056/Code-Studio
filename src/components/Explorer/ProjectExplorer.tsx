@@ -1,5 +1,4 @@
 import React, { useMemo, useRef, useState } from 'react';
-import JSZip from 'jszip';
 import {
   ChevronDown,
   ChevronRight,
@@ -18,6 +17,10 @@ import {
   Upload,
 } from 'lucide-react';
 import { useIdeStore } from '../../stores/ideStore';
+import {
+  downloadFullProjectZip,
+  getProjectEstimatedSizeMb,
+} from '../../services/projectExporter';
 import { FileNode } from '../../types/ide';
 
 interface TreeEntry {
@@ -147,20 +150,12 @@ export const ProjectExplorer: React.FC = () => {
   };
 
   const handleExportProjectZip = async () => {
-    const zip = new JSZip();
-    activeProject.files.forEach((f) => {
-      if (f.type === 'file') {
-        zip.file(f.path, f.content || '');
-      }
-    });
-    const blob = await zip.generateAsync({ type: 'blob' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${activeProject.name}-source.zip`;
-    a.click();
-    URL.revokeObjectURL(url);
-    appendLogcat('I', 'FileExplorer', `Exported ${activeProject.name}-source.zip`);
+    await downloadFullProjectZip(activeProject);
+    appendLogcat(
+      'I',
+      'FileExplorer',
+      `Exported full project ${activeProject.name}-Full-Project.zip (${getProjectEstimatedSizeMb(activeProject)} MB)`
+    );
   };
 
   const handleImportSingleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -468,9 +463,21 @@ export const ProjectExplorer: React.FC = () => {
         )}
       </div>
 
-      {/* Storage Path Footer */}
-      <div className="px-3 py-2 border-t border-slate-800/80 text-[11px] font-mono text-slate-500 truncate">
-        {activeProject.storagePath}
+      {/* Storage Path & Full Project Download Footer */}
+      <div className="p-2.5 border-t border-slate-800/80 space-y-2 bg-[#0B0F17]/60">
+        <button
+          type="button"
+          onClick={handleExportProjectZip}
+          className="w-full py-2 px-3 rounded-lg bg-emerald-600/15 hover:bg-emerald-600/25 border border-emerald-500/40 text-xs font-semibold text-emerald-300 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+        >
+          <Download className="w-3.5 h-3.5" />
+          <span>
+            Download Full Project ({getProjectEstimatedSizeMb(activeProject)} MB)
+          </span>
+        </button>
+        <div className="text-[10px] font-mono text-slate-500 truncate">
+          {activeProject.storagePath}
+        </div>
       </div>
     </div>
   );
