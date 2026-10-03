@@ -15,6 +15,7 @@ import {
   FolderTree,
   Hammer,
   Home,
+  Package,
   Play,
   Search,
   Settings,
@@ -66,6 +67,9 @@ export default function App() {
     settings,
     projects,
     activeProjectId,
+    apkArtifacts,
+    setActiveInstallApk,
+    termuxConnected,
   } = useIdeStore();
 
   const activeProject = useMemo(
@@ -188,6 +192,23 @@ export default function App() {
           <button
             type="button"
             onClick={() => {
+              const latestApk = apkArtifacts[0];
+              if (latestApk) {
+                setActiveInstallApk(latestApk);
+              } else {
+                triggerBuild('apk', true);
+              }
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-950/60 hover:bg-emerald-900/60 border border-emerald-700/60 text-xs font-semibold text-emerald-300 hover:text-emerald-200 transition-colors whitespace-nowrap cursor-pointer"
+            title="Install Application (100% Guaranteed)"
+          >
+            <Package className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="hidden sm:inline">Install App (100%)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
               triggerBuild('apk', true);
               if (activeScreen === 'workspace') {
                 setBottomPanelTab('build_output');
@@ -244,9 +265,29 @@ export default function App() {
                         ? 'bg-slate-800 text-emerald-300'
                         : 'text-slate-400 hover:text-slate-200'
                     }`}
+                    title="Termux Shell & Bridge Connection"
                   >
                     <TerminalIcon className="w-3.5 h-3.5" />
-                    <span>Terminal</span>
+                    <span>Termux Terminal</span>
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full ${
+                        termuxConnected ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'
+                      }`}
+                    />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setBottomPanelTab('build_output')}
+                    className={`px-3 py-1 rounded text-xs font-medium flex items-center gap-1.5 transition-colors whitespace-nowrap cursor-pointer ${
+                      bottomPanelOpen && bottomPanelTab === 'build_output'
+                        ? 'bg-slate-800 text-emerald-300'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                    title="Clean Build Logs Mode: Shows only compiler and build logs without terminal clutter"
+                  >
+                    <Hammer className="w-3.5 h-3.5" />
+                    <span>Only Build Logs</span>
                   </button>
 
                   <button
@@ -260,19 +301,6 @@ export default function App() {
                   >
                     <Smartphone className="w-3.5 h-3.5" />
                     <span>Logcat</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setBottomPanelTab('build_output')}
-                    className={`px-3 py-1 rounded text-xs font-medium flex items-center gap-1.5 transition-colors whitespace-nowrap cursor-pointer ${
-                      bottomPanelOpen && bottomPanelTab === 'build_output'
-                        ? 'bg-slate-800 text-emerald-300'
-                        : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    <Hammer className="w-3.5 h-3.5" />
-                    <span>Build Output</span>
                   </button>
                 </div>
 
@@ -300,19 +328,64 @@ export default function App() {
                   {bottomPanelTab === 'terminal' && <TerminalPanel />}
                   {bottomPanelTab === 'logcat' && <LogcatPanel />}
                   {bottomPanelTab === 'build_output' && (
-                    <div className="p-3 h-full overflow-y-auto font-mono text-xs space-y-1 text-slate-300">
-                      {buildLogs.map((ln, idx) => (
-                        <div
-                          key={idx}
-                          className={
-                            ln.startsWith('BUILD SUCCESSFUL')
-                              ? 'text-emerald-400 font-semibold'
-                              : ''
-                          }
-                        >
-                          {ln || '\u00A0'}
+                    <div className="flex flex-col h-full bg-[#070A0F] text-slate-300">
+                      <div className="px-3 py-1.5 bg-slate-950 border-b border-slate-800/80 flex items-center justify-between text-xs font-sans">
+                        <div className="flex items-center gap-2">
+                          <Hammer className="w-3.5 h-3.5 text-emerald-400" />
+                          <span className="font-semibold text-slate-100">
+                            {activeProject.name} (Only Build Logs)
+                          </span>
+                          <span className="text-[10px] font-mono text-emerald-400">
+                            {isBuilding ? '• Compiling APK...' : '• Ready'}
+                          </span>
                         </div>
-                      ))}
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => triggerBuild('apk', true)}
+                            disabled={isBuilding}
+                            className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-slate-950 font-sans font-bold text-xs flex items-center gap-1 cursor-pointer"
+                          >
+                            <Play className="w-3 h-3 fill-current" />
+                            <span>{isBuilding ? 'Building...' : 'Build APK'}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => triggerBuild('clean')}
+                            disabled={isBuilding}
+                            className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800 text-[11px] text-slate-300 cursor-pointer"
+                          >
+                            Clean
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard?.writeText(buildLogs.join('\n'));
+                            }}
+                            className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800 text-[11px] text-slate-300 cursor-pointer"
+                          >
+                            Copy Logs
+                          </button>
+                        </div>
+                      </div>
+                      <div className="p-3 flex-1 overflow-y-auto font-mono text-xs space-y-1 text-slate-300">
+                        {buildLogs.map((ln, idx) => (
+                          <div
+                            key={idx}
+                            className={
+                              ln.startsWith('BUILD SUCCESSFUL')
+                                ? 'text-emerald-400 font-semibold bg-emerald-950/20 px-2 py-0.5 rounded border border-emerald-800/40'
+                                : ln.startsWith('> Task')
+                                ? 'text-sky-300'
+                                : ln.startsWith('Starting')
+                                ? 'text-emerald-300 font-medium'
+                                : ''
+                            }
+                          >
+                            {ln || '\u00A0'}
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>

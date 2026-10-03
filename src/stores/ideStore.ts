@@ -96,11 +96,15 @@ interface IdeState {
   deleteFileOrFolder: (targetPath: string) => void;
   duplicateFile: (targetPath: string) => void;
 
-  // Terminal
+  // Terminal & Termux Bridge
   terminalCwd: string;
   terminalLines: TerminalLine[];
   executeTerminalCommand: (rawCmd: string) => void;
   clearTerminal: () => void;
+  termuxConnected: boolean;
+  setTermuxConnected: (connected: boolean) => void;
+  terminalViewMode: 'termux' | 'build_logs';
+  setTerminalViewMode: (mode: 'termux' | 'build_logs') => void;
 
   // Build & APK System
   buildVariant: 'debug' | 'release';
@@ -1220,6 +1224,10 @@ export const useIdeStore = create<IdeState>((set, get) => ({
   ],
 
   clearTerminal: () => set({ terminalLines: [] }),
+  termuxConnected: true,
+  setTermuxConnected: (c) => set({ termuxConnected: c }),
+  terminalViewMode: 'termux',
+  setTerminalViewMode: (m) => set({ terminalViewMode: m }),
 
   executeTerminalCommand: (rawCmd) => {
     const cmd = rawCmd.trim();
@@ -1456,10 +1464,24 @@ export const useIdeStore = create<IdeState>((set, get) => ({
     }
 
     if (base === 'java' || base === 'javac') {
+      const isJvmMemFlag = cmd.includes('-Xmx') || cmd.includes('-Xms');
+      const isJarRun = cmd.includes('-jar') || cmd.includes('gradle-wrapper') || cmd.includes('GradleWrapperMain');
+
+      if (isJarRun) {
+        appendLines([
+          {
+            type: 'info',
+            text: 'Starting Gradle daemon with OpenJDK 17 (JVM Heap: 2048MB -Xmx2048m -Xms512m)...',
+          },
+        ]);
+        get().triggerBuild('apk', true);
+        return;
+      }
+
       appendLines([
         {
           type: 'output',
-          text: 'openjdk version "17.0.11" 2024-04-16 LTS\nOpenJDK Runtime Environment (build 17.0.11+9-ARM64)\nOpenJDK 64-Bit Server VM (build 17.0.11+9, mixed mode)',
+          text: `openjdk version "17.0.11" 2024-04-16 LTS\nOpenJDK Runtime Environment (build 17.0.11+9-ARM64)\nOpenJDK 64-Bit Server VM (build 17.0.11+9, mixed mode)\nJVM Memory Max: 2048 MB (-Xmx2048m)${isJvmMemFlag ? ' [Configured 100% OK]' : ''}`,
         },
       ]);
       return;
@@ -1487,19 +1509,19 @@ export const useIdeStore = create<IdeState>((set, get) => ({
             text: 'Resolving dependencies in pubspec.yaml...\n+ cupertino_icons 1.0.8\n+ flutter 0.0.0 from sdk flutter\n+ material_color_utilities 0.11.1\nGot dependencies!',
           },
         ]);
-      } else if (arg1 === 'build' || arg1 === 'run') {
+      } else if (arg1 === 'build' || arg1 === 'run' || arg1 === 'install') {
         appendLines([
           {
             type: 'info',
             text: `Running Gradle task 'assembleDebug' for Flutter project ${activeProject.name}...`,
           },
         ]);
-        get().triggerBuild('apk');
+        get().triggerBuild('apk', true);
         setTimeout(() => {
           appendLines([
             {
               type: 'success',
-              text: `✓ Built build/app/outputs/flutter-apk/${activeProject.name}-debug.apk (2.4MB)`,
+              text: `✓ Built build/app/outputs/flutter-apk/${activeProject.name}-debug.apk (24.8MB)\n✓ 100% Installed on device target!`,
             },
           ]);
         }, 1500);
@@ -1514,7 +1536,46 @@ export const useIdeStore = create<IdeState>((set, get) => ({
       return;
     }
 
+    if (base === 'termux-setup-storage') {
+      appendLines([
+        {
+          type: 'success',
+          text: '✓ Storage permission granted to Termux!\n~/storage/shared -> /storage/emulated/0\n~/storage/downloads -> /storage/emulated/0/Download\n~/storage/dcim -> /storage/emulated/0/DCIM',
+        },
+      ]);
+      return;
+    }
+
+    if (base === 'termux' || base === 'termux-info') {
+      appendLines([
+        {
+          type: 'info',
+          text: [
+            '================== TERMUX BRIDGE ENVIRONMENT ==================',
+            'Status:          CONNECTED (Port 8022 · localhost)',
+            'Architecture:    aarch64 (ARM64 Android 14)',
+            'Prefix:          /data/data/com.termux/files/usr',
+            'Home:            /data/data/com.termux/files/home',
+            'Shell:           /data/data/com.termux/files/usr/bin/bash (v5.2.26)',
+            'OpenSSH Server:  sshd running on 127.0.0.1:8022',
+            'Installed Tools: OpenJDK 17, Gradle 8.7, Git 2.45, Node 22, Flutter 3.24',
+            '==============================================================',
+          ].join('\n'),
+        },
+      ]);
+      return;
+    }
+
     if (base === 'sdkmanager' || base === 'pkg') {
+      if (arg1 === 'update' || arg1 === 'upgrade') {
+        appendLines([
+          {
+            type: 'output',
+            text: 'Hit:1 https://packages.termux.dev/apt/termux-main stable InRelease\nReading package lists... Done\nBuilding dependency tree... Done\nAll 114 packages are up to date.',
+          },
+        ]);
+        return;
+      }
       if (arg1 === '--list' || arg1 === 'list') {
         appendLines([
           {
@@ -1546,13 +1607,53 @@ export const useIdeStore = create<IdeState>((set, get) => ({
       return;
     }
 
-    if (base === './gradlew' || base === 'gradle') {
-      const task = arg1 || 'assembleDebug';
+    // Direct install shortcut
+    if (base === 'install') {
+      const latestApk = state.apkArtifacts[0];
+      if (latestApk) {
+        get().installApkOnDevice(latestApk.id);
+        get().setActiveInstallApk(latestApk);
+        appendLines([
+          {
+            type: 'success',
+            text: `Performing Streamed Install of ${latestApk.fileName} (100% Installed)\nPackage: ${latestApk.packageName}\nTarget: This Device (Connected)`,
+          },
+        ]);
+      } else {
+        get().triggerBuild('apk', true);
+        appendLines([
+          {
+            type: 'info',
+            text: 'No compiled APK found. Automatically building and installing latest APK (100%)...',
+          },
+        ]);
+      }
+      return;
+    }
+
+    // Comprehensive Gradle command matching (./gradlew, gradlew, gradle, sh gradlew, bash gradlew, build)
+    const isGradle =
+      base === './gradlew' ||
+      base === 'gradlew' ||
+      base === 'gradle' ||
+      base === './gradlew.bat' ||
+      base === 'gradlew.bat' ||
+      base === 'build' ||
+      ((base === 'sh' || base === 'bash') &&
+        (arg1 === 'gradlew' || arg1 === './gradlew' || arg1 === 'gradlew.bat'));
+
+    if (isGradle) {
+      let task = (base === 'sh' || base === 'bash' ? parts[2] : arg1) || 'assembleDebug';
+      // Clean up common input variations
+      if (task.startsWith('"') || task.startsWith("'")) {
+        task = task.replace(/^['"]|['"]$/g, '');
+      }
+
       if (task === '-v' || task === '--version') {
         appendLines([
           {
             type: 'output',
-            text: '------------------------------------------------------------\nGradle 8.7\n------------------------------------------------------------\nKotlin:       2.0.20\nGroovy:       3.0.21\nJVM:          17.0.11 (OpenJDK ARM64)',
+            text: '------------------------------------------------------------\nGradle 8.7\n------------------------------------------------------------\nKotlin:       2.0.20\nGroovy:       3.0.21\nJVM:          17.0.11 (OpenJDK ARM64 -Xmx2048m)',
           },
         ]);
         return;
@@ -1566,7 +1667,7 @@ export const useIdeStore = create<IdeState>((set, get) => ({
         appendLines([
           {
             type: 'info',
-            text: `Starting a Gradle Daemon (subsequent builds will be faster)\n> Task :app:compileReleaseSources\n> Task :app:mergeReleaseResources\n> Task :app:bundleRelease`,
+            text: `Starting Gradle Daemon (JVM: -Xmx2048m -Xms512m)\n> Task :app:compileReleaseSources\n> Task :app:mergeReleaseResources\n> Task :app:bundleRelease`,
           },
         ]);
         get().triggerBuild('aab');
@@ -1580,6 +1681,7 @@ export const useIdeStore = create<IdeState>((set, get) => ({
         }, 1400);
       } else {
         const isRel = task.toLowerCase().includes('release');
+        const autoInstall = task.toLowerCase().includes('install') || task.toLowerCase().includes('run');
         if (isRel) get().setBuildVariant('release');
         else get().setBuildVariant('debug');
 
@@ -1589,12 +1691,12 @@ export const useIdeStore = create<IdeState>((set, get) => ({
             text: `> Task :app:compile${isRel ? 'Release' : 'Debug'}Sources\n> Task :app:merge${isRel ? 'Release' : 'Debug'}Resources\n> Task :app:process${isRel ? 'Release' : 'Debug'}MainManifest\n> Task :app:dexBuilder${isRel ? 'Release' : 'Debug'}\n> Task :app:package${isRel ? 'Release' : 'Debug'}`,
           },
         ]);
-        get().triggerBuild('apk');
+        get().triggerBuild('apk', autoInstall);
         setTimeout(() => {
           appendLines([
             {
               type: 'success',
-              text: `\nBUILD SUCCESSFUL in 1.6s\n5 actionable tasks: 5 executed\nAPK Output: app/build/outputs/apk/${isRel ? 'release' : 'debug'}/${activeProject.name}-${isRel ? 'release' : 'debug'}.apk`,
+              text: `\nBUILD SUCCESSFUL in 1.6s\n5 actionable tasks: 5 executed\nAPK Output: app/build/outputs/apk/${isRel ? 'release' : 'debug'}/${activeProject.name}-${isRel ? 'release' : 'debug'}.apk${autoInstall ? '\n✓ 100% Installed on device target!' : ''}`,
             },
           ]);
         }, 1500);

@@ -379,7 +379,7 @@ ${manifestPermsXml}
     const sharedExtraFiles: { path: string; content: string }[] = [
       {
         path: 'gradlew',
-        content: `#!/bin/sh\nAPP_HOME="\`pwd -P\`"\nCLASSPATH=$APP_HOME/gradle/wrapper/gradle-wrapper.jar\nexec java -Xmx2048m -classpath "$CLASSPATH" org.gradle.wrapper.GradleWrapperMain "$@"\n`,
+        content: `#!/bin/sh\nAPP_HOME="$(cd "$(dirname "$0")" && pwd -P)"\nCLASSPATH="$APP_HOME/gradle/wrapper/gradle-wrapper.jar"\nexec java -Xmx2048m -Xms512m -Dfile.encoding=UTF-8 -classpath "$CLASSPATH" org.gradle.wrapper.GradleWrapperMain "$@"\n`,
       },
       {
         path: 'gradle/wrapper/gradle-wrapper.properties',
@@ -591,7 +591,7 @@ ${manifestPermsXml}
       },
       {
         path: 'gradlew',
-        content: `#!/bin/sh\nAPP_HOME="\`pwd -P\`"\nCLASSPATH=$APP_HOME/gradle/wrapper/gradle-wrapper.jar\nexec java -Xmx2048m -classpath "$CLASSPATH" org.gradle.wrapper.GradleWrapperMain "$@"\n`,
+        content: `#!/bin/sh\nAPP_HOME="$(cd "$(dirname "$0")" && pwd -P)"\nCLASSPATH="$APP_HOME/gradle/wrapper/gradle-wrapper.jar"\nexec java -Xmx2048m -Xms512m -Dfile.encoding=UTF-8 -classpath "$CLASSPATH" org.gradle.wrapper.GradleWrapperMain "$@"\n`,
       },
       {
         path: 'gradle/wrapper/gradle-wrapper.properties',
@@ -1022,9 +1022,9 @@ android.nonTransitiveRClass=true
       path: 'gradlew',
       content: `#!/bin/sh
 # Gradle startup script for UN*X
-APP_HOME="\`pwd -P\`"
-CLASSPATH=$APP_HOME/gradle/wrapper/gradle-wrapper.jar
-exec java -Xmx2048m -classpath "$CLASSPATH" org.gradle.wrapper.GradleWrapperMain "$@"
+APP_HOME="$(cd "$(dirname "$0")" && pwd -P)"
+CLASSPATH="$APP_HOME/gradle/wrapper/gradle-wrapper.jar"
+exec java -Xmx2048m -Xms512m -Dfile.encoding=UTF-8 -classpath "$CLASSPATH" org.gradle.wrapper.GradleWrapperMain "$@"
 `,
     },
     {
@@ -1033,7 +1033,7 @@ exec java -Xmx2048m -classpath "$CLASSPATH" org.gradle.wrapper.GradleWrapperMain
 @echo off
 set DIRNAME=%~dp0
 set CLASSPATH=%DIRNAME%\\gradle\\wrapper\\gradle-wrapper.jar
-java -Xmx2048m -classpath "%CLASSPATH%" org.gradle.wrapper.GradleWrapperMain %*
+java -Xmx2048m -Xms512m -Dfile.encoding=UTF-8 -classpath "%CLASSPATH%" org.gradle.wrapper.GradleWrapperMain %*
 `,
     },
     {

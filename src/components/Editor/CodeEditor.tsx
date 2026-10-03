@@ -583,9 +583,15 @@ export const CodeEditor: React.FC = () => {
                 }`}
               >
                 {m === 'code' && <Code2 className="w-3 h-3" />}
-                {m === 'design' && <Smartphone className="w-3 h-3" />}
+                {m === 'design' && <Smartphone className="w-3 h-3 text-emerald-300" />}
                 {m === 'split' && <Columns className="w-3 h-3" />}
-                <span>{m === 'design' ? 'Preview' : m}</span>
+                <span>
+                  {m === 'design'
+                    ? 'Live Preview'
+                    : m === 'split'
+                    ? 'Split Live Preview'
+                    : 'Code Editor'}
+                </span>
               </button>
             ))}
           </div>
